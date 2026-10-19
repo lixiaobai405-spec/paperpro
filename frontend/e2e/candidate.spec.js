@@ -297,3 +297,61 @@ test('AI interpretation is opt-in and cannot run without explicit consent', asyn
   await expect(page.getByTestId('dimension-experience')).toContainText('DeepSeek 辅助解读');
   expect(externalCallWasRequested).toBe(true);
 });
+
+
+test('PDF work-role suggestions remain unscored until human accepts, and can be ignored', async ({ page }) => {
+  await page.goto('/');
+  const heading0 = '2021.07-2023.12 虚构技术有限公司 平台运营';
+  const heading1 = '2023.12-2024.09 合成软件有限公司 业务分析';
+  const initial = {
+    name: '合成人员', title: '', email: '', phone: '', location: '',
+    links: [], summary: '', self_evaluation: '', skills: [],
+    certificates: [], education: [], projects: [], additional: [],
+    source_sha256: 'synthetic',
+    source_text: heading0 + '\n' + heading1,
+    experience: [
+      {heading:heading0,company:'虚构技术有限公司 平台运营',role:'',
+       start_date:'2021.07',end_date:'2023.12',bullets:[]},
+      {heading:heading1,company:'合成软件有限公司 业务分析',role:'',
+       start_date:'2023.12',end_date:'2024.09',bullets:[]},
+    ],
+  };
+  const hints = [
+    {id:'work-relation-0',experience_index:0,source_path:'experience.0.heading',
+     source_heading:heading0,suggested_company:'虚构技术有限公司',
+     suggested_role:'平台运营',status:'unverified',note:'未经核实的候选'},
+    {id:'work-relation-1',experience_index:1,source_path:'experience.1.heading',
+     source_heading:heading1,suggested_company:'合成软件有限公司',
+     suggested_role:'业务分析',status:'unverified',note:'未经核实的候选'},
+  ];
+  await page.route('**/api/diagnosis/parse', async route =>
+    route.fulfill({
+      status:200, contentType:'application/json',
+      body:JSON.stringify({
+        status:'ok',filename:'mock-work.pdf',method:'pdf-text',
+        sha256:'synthetic',resume:initial,source_text:initial.source_text,
+        warnings:['未经核实的工作职位排版候选'],review_hints:hints,
+      }),
+    })
+  );
+  await page.getByTestId('candidate-dropzone').locator('input[type=file]').setInputFiles({
+    name:'mock-work.pdf',mimeType:'application/pdf',
+    buffer:Buffer.from('%PDF-1.4\n% synthetic fixture\n'),
+  });
+  await expect(page.getByTestId('candidate-work-hints')).toBeVisible();
+  await expect(page.getByTestId('experience-role-0')).toHaveValue('');
+  await expect(page.getByTestId('experience-company-0')).toHaveValue(
+    '虚构技术有限公司 平台运营'
+  );
+  await page.getByTestId('accept-work-relation-0').click();
+  await expect(page.getByTestId('experience-role-0')).toHaveValue('平台运营');
+  await expect(page.getByTestId('experience-company-0')).toHaveValue('虚构技术有限公司');
+  await expect(page.getByTestId('experience-role-1')).toHaveValue('');
+  await page.getByTestId('ignore-work-relation-1').click();
+  await expect(page.getByTestId('candidate-work-hints')).toHaveCount(0);
+  await expect(page.getByTestId('experience-role-1')).toHaveValue('');
+  await page.getByTestId('candidate-next-target').click();
+  await page.getByTestId('candidate-target-role').fill('平台运营');
+  await page.getByTestId('candidate-generate').click();
+  await expect(page.getByTestId('dimension-match')).toBeVisible();
+});

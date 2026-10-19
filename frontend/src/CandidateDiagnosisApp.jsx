@@ -256,6 +256,7 @@ export default function CandidateDiagnosisApp() {
   const [report,setReport]=useState(null);
   const [selected,setSelected]=useState([]);
   const [selectedQuestions,setSelectedQuestions]=useState([]);
+  const [reviewHints,setReviewHints]=useState([]);
   const [busy,setBusy]=useState('');
   const [elapsed,setElapsed]=useState(0);
   const [error,setError]=useState('');
@@ -281,7 +282,11 @@ export default function CandidateDiagnosisApp() {
     setResume(previous=>({...previous,[field]:value})); invalidate();
   }
   function modifyEntry(group,index,field,value){
-    setResume(previous=>({...previous,[group]:previous[group].map((e,i)=>i===index?{...e,[field]:value}:e)}));invalidate();
+    setResume(previous=>({...previous,[group]:previous[group].map((e,i)=>i===index?{...e,[field]:value}:e)}));
+    if(group==='experience'){
+      setReviewHints(previous=>previous.filter(h=>h.experience_index!==index));
+    }
+    invalidate();
   }
   function addEntry(group){
     const next=group==='experience'
@@ -290,7 +295,27 @@ export default function CandidateDiagnosisApp() {
     setResume(previous=>({...previous,[group]:[...previous[group],next]}));invalidate();
   }
   function removeEntry(group,index){
-    setResume(previous=>({...previous,[group]:previous[group].filter((_,i)=>i!==index)}));invalidate();
+    setResume(previous=>({...previous,[group]:previous[group].filter((_,i)=>i!==index)}));
+    if(group==='experience')setReviewHints([]);
+    invalidate();
+  }
+  function acceptWorkHint(hint){
+    const index=hint.experience_index;
+    const entry=resume?.experience?.[index];
+    if(!entry || entry.role || entry.heading!==hint.source_heading
+       || !entry.company.includes(hint.suggested_company)
+       || !entry.company.includes(hint.suggested_role)){
+      setReviewHints(previous=>previous.filter(h=>h.id!==hint.id));
+      return;
+    }
+    setResume(previous=>({
+      ...previous,
+      experience:previous.experience.map((item,i)=>i===index?{
+        ...item,company:hint.suggested_company,role:hint.suggested_role
+      }:item)
+    }));
+    setReviewHints(previous=>previous.filter(h=>h.id!==hint.id));
+    invalidate();
   }
   function modifyTarget(field,value){setTarget(previous=>({...previous,[field]:value}));invalidate();}
   function changePaste(value){
@@ -301,6 +326,8 @@ export default function CandidateDiagnosisApp() {
   }
   function receive(result){
     setResume(result.resume);
+    setReviewHints(Array.isArray(result.review_hints)?
+      result.review_hints.filter(h=>h.status==='unverified' && Number.isInteger(h.experience_index)) : []);
     setFileMeta({name:result.filename,method:result.method,sha256:result.sha256,warnings:result.warnings||[]});
     setReport(null);setSelected([]);setSelectedQuestions([]);setNavNotice('');
     setStep(1);
@@ -460,6 +487,27 @@ export default function CandidateDiagnosisApp() {
             <details className="diag-source"><summary>查看原始识别文本（核对依据）</summary>
               <pre>{resume.source_text||''}</pre></details>
           </Panel>
+          {reviewHints.length>0&&<Panel title="待确认的工作职位排版提示"
+            testId="candidate-work-hints" extra={<Status text={reviewHints.length+' 项待核对'} color="orange"/>}>
+            <Alert color="orange" variant="light" mb="md" icon={<IconInfoCircle size={17}/>}>
+              同行的文字块不一定构成真实职位。以下均为未经核实的候选项，
+              默认不写入简历、不进入评分。请对照原 PDF 确认后再采纳。
+            </Alert>
+            {reviewHints.map(h=><Paper key={h.id} p="md" mb="sm" withBorder radius="md"
+              data-testid={'work-hint-'+h.id}>
+              <Text size="xs" c="dimmed">原文位置：{h.source_path}</Text>
+              <Text size="sm" mt={5}>原文：{h.source_heading}</Text>
+              <Text size="sm" fw={600} mt={5}>候选机构：{h.suggested_company}</Text>
+              <Text size="sm" fw={600}>候选职位：{h.suggested_role}</Text>
+              <Group mt="sm" gap="xs">
+                <Button size="xs" onClick={()=>acceptWorkHint(h)}
+                  data-testid={'accept-'+h.id}>已核对，采纳到表单</Button>
+                <Button size="xs" variant="subtle" color="gray"
+                  onClick={()=>setReviewHints(previous=>previous.filter(x=>x.id!==h.id))}
+                  data-testid={'ignore-'+h.id}>忽略此候选</Button>
+              </Group>
+            </Paper>)}
+          </Panel>}
           <ResumeEditor resume={resume} update={modify} updateExperience={(i,f,v)=>modifyEntry('experience',i,f,v)}
             updateEntry={modifyEntry} addEntry={addEntry} removeEntry={removeEntry}/>
           <Group justify="space-between" mt="xl">

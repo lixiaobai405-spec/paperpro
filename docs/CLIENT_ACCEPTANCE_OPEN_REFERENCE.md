@@ -77,3 +77,17 @@
 **独立 GT 的字段级接受审计：** `uv run --python 3.12 python -m scripts.audit_layout_complement`。固定 20 份外部合成 PDF 中，4 个此前空白的姓名被新机制补入，4 个均与独立 GT 相符（**该受控挑战集新增姓名的 4/4**，不是现实应用中的姓名识别准确率）；没有因辅助机制增加任何学历条目，未改变原文件 SHA、完整原文、现有工作经历、项目与技能。报告不输出个人身份原文，只给公开的合成样本编号和聚合数字。
 
 下一阶段应继续解决复杂版式经历和岗位关系识别，避免全局重排造成回退。
+
+## 带坐标的工作关系试验（保留人工确认，不自动写入）
+
+先通过固定外部合成 PDF 的安全统计发现：有 9 个职位词仍出现在已解析经历标题但未进入 role 字段，其中 8 个可在 PDF 的独立文字 Span 找到，部分与日期、公司处于同一行。为了处理“日期—机构—职位”三段排版，在 `app/diagnosis/work_relation.py` 中实现了基于物理行和原文一致性的候选提案实验，并用虚构 PDF 编写失败反例与回归测试。
+
+关键独立证据：第一次尝试自动写入时，同一固定外部 20 份 PDF 的结构化命中**仍为 167/276**；新填的唯一一项职位**不符合独立 GT 的职位/企业配对**，属于可复现的语义误判。因此取消自动写入，改成只返回 `review_hints`：每项具有 `source_path`、原始标题、候选机构/职位、`status=unverified`，没有任何字段或分数副作用。用户在第二步表单核对原件后可以自主“采纳”或“忽略”；更改对应经历字段会使旧提示失效。
+
+复验命令：
+
+    uv run --python 3.12 python -m scripts.profile_work_relation_gates
+    uv run --python 3.12 python -m pytest tests/test_work_relation_geometry.py -q
+    cd frontend && npm test -- --project=chromium e2e/candidate.spec.js -g "PDF work-role suggestions"
+
+固定外部基准仍为 **167/276（60.51%）**；实验仅补齐“用户决定前不把几何假设写成个人履历事实”的工程闭环。对外不能宣传自动职位识别准确率增加。本轮不涉及收费 AI、真实 HR 标签或直接采集牛客个人简历。

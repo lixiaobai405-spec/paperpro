@@ -31,6 +31,8 @@ PaperPro 现有两条独立但共用解析与设置基础设施的流程：**求
 
 **甲方工程演示验收**：运行 `uv run --python 3.12 python -m scripts.client_acceptance_smoke`，逐项执行并打印 R7–R10 功能合同的可操作断言与未验证的数据门槛。公开资料与评测说明在 `docs/CLIENT_ACCEPTANCE_OPEN_REFERENCE.md`。另可在 GitHub API 有配额时运行 `uv run --python 3.12 python -m scripts.benchmark_external_resume_corpus`，对外部 Apache-2.0 合成 PDF 的独立 GT 进行结构化解析比较。相同外部挑战集最初为 **136/276 = 49.28%**，双语标题修复后 **143/276 = 51.81%**，有日期的公司＋职位拆分后 **156/276 = 56.52%**，中英文章节及多栏联系信息修复后为 **163/276 = 59.06%**；本轮新增基于 PDF 坐标的**保守双视图补充**，仅在原姓名/学历为空且可追溯原文时辅助补齐，最新固定基准为 **167/276 = 60.51%**（原文提取始终 255/276）。直接整栏重排的候选方法退化到 152/276，已否决；**仍未达到 90%**。已定位主要瓶颈为复杂排版的语义分块、公司和职位关系识别。
 
+**工作职位的几何辅助校对（人工确认）：** 当 PDF 已有起止年月和工作经历，却无法拆出职位时，系统可依据同行的日期、机构和文字块提供**未经核实的候选关系**，在第二步显示原文、候选机构/职位与「已核对采纳 / 忽略」按钮。**不点击采纳则不写入简历，也不影响评分或任职年限**。外部固定挑战集实测仅产生 1 条候选且与独立配对标注不一致，故严格禁止自动采纳；基础解析命中仍为 167/276（60.51%），不是新增识别增益。工程反例见 `tests/test_work_relation_geometry.py`、审计见 `scripts/profile_work_relation_gates.py`。
+
 规则权重和高/中/低阈值仍属**初版假设**。已完成 48 个合成层级情景、±20% 权重扰动测试，以及 1,680 组独立反事实关系的压力测试（`uv run --python 3.12 python -m scripts.stress_test_scoring`），据此修复了重复证据刷分和技能词表遗漏。但尚缺独立 HR 标注样本与真实筛选结果，**不能把分数写成录用概率或已验证的 HR 官方打分**。详情见 `docs/SCORING_METHODOLOGY.md` 和 `docs/R7_R10_CANDIDATE_DIAGNOSIS.md`。已提供完全离线的专家评分评价脚本：`uv run --python 3.12 python -m scripts.evaluate_hr_dataset --input evaluation_private/hr_labels.json`；私密数据集不会被 Git 跟踪。
 
 ## 经典简历编辑（/classic）
