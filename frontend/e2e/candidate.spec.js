@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, devices } from '@playwright/test';
 import fs from 'node:fs/promises';
 
 test('candidate wizard: pasted resume, editable fields, target gate, five dimensions, selected-only downloads', async ({ page }) => {
@@ -163,6 +163,102 @@ test('repeated section toggles in StrictMode do not lose checkbox state', async 
   await page.getByTestId('candidate-generate').click();
   await expect(page.getByTestId('dimension-potential')).toContainText('已生成');
   expect(pageErrors).toEqual([]);
+});
+
+test('emulated Android/iOS file inputs support photo picker submission', async ({ browser }) => {
+  // This covers responsive HTML file-picker wiring, not native hardware
+  // gallery/camera permission dialogs, which require physical device QA.
+  for (const deviceName of ['Pixel 7', 'iPhone 13']) {
+    const { defaultBrowserType: _browserType, ...device } = devices[deviceName];
+    const context = await browser.newContext(device);
+    try {
+      const mobile = await context.newPage();
+      await mobile.goto('/');
+      const field = mobile.getByTestId('candidate-dropzone').locator('input[type="file"]');
+      await expect(field).toHaveCount(1);
+      const accepted = await field.getAttribute('accept');
+      expect(accepted).toContain('image/png');
+      expect(accepted).toContain('image/jpeg');
+      let uploaded = false;
+      await mobile.route('**/api/diagnosis/parse', async route => {
+        uploaded = route.request().headers()['content-type'].includes('multipart/form-data');
+        const draft = {
+          name: '纯合成照片候选人', title: '工程师',
+          phone: '', email: '', location: '', links: [],
+          summary: '', self_evaluation: '', skills: ['Python'],
+          experience: [], education: [], projects: [],
+          certificates: [], additional: [], source_sha256: 'sample',
+          source_text: '纯合成图像，仅验证浏览器文件选择事件',
+        };
+        await route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok', filename: 'photo.png', method: 'image-ocr',
+            sha256: 'sample', resume: draft, warnings: ['照片识别请人工校对'],
+          }),
+        });
+      });
+      await field.setInputFiles({
+        name: 'photo.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAObXG1QAAAAASUVORK5CYII=',
+          'base64',
+        ),
+      });
+      await expect(mobile.getByTestId('candidate-name')).toHaveValue('纯合成照片候选人');
+      await expect(mobile.getByText('照片识别请人工校对')).toBeVisible();
+      expect(uploaded).toBe(true);
+      expect(await mobile.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBeTruthy();
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test('actual Chrome scan upload runs real local OCR and opens editable review', async ({ page }) => {
+  await page.goto('/');
+  // Build a readable, fully synthetic screenshot inside browser memory.
+  // The request below is NOT mocked: it reaches the real FastAPI /parse + OCR.
+  const image64 = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 2100;
+    canvas.height = 1050;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 2100, 1050);
+    ctx.fillStyle = '#111111';
+    ctx.font = '52px Arial';
+    const rows = [
+      'ALEX EXAMPLE',
+      'Target Role: Backend Developer',
+      'Skills',
+      'Python, SQL, Docker',
+      'Work Experience',
+      '2022.01 - 2025.06 Example Labs | Backend Developer',
+      '- Built Python SQL APIs',
+      'Education',
+      'Example University | Bachelor',
+    ];
+    rows.forEach((line, i) => ctx.fillText(line, 70, 100 + 94 * i));
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  const sent = page.waitForResponse(response =>
+    response.url().endsWith('/api/diagnosis/parse') &&
+    response.request().method() === 'POST', { timeout: 120000 });
+  await page.getByTestId('candidate-dropzone').locator('input[type=file]').setInputFiles({
+    name: 'synthetic-scan.png', mimeType: 'image/png',
+    buffer: Buffer.from(image64, 'base64'),
+  });
+  const response = await sent;
+  expect(response.status()).toBe(200);
+  expect((await response.json()).method).toBe('image-ocr');
+  await expect(page.getByTestId('candidate-name')).toHaveValue('ALEX EXAMPLE');
+  await expect(page.getByText('synthetic-scan.png')).toBeVisible();
+  await page.getByTestId('candidate-next-target').click();
+  await page.getByTestId('candidate-target-role').fill('Backend Developer');
+  await page.getByTestId('candidate-generate').click();
+  await expect(page.getByTestId('dimension-match')).toBeVisible();
 });
 
 test('legacy resume editor remains available on /classic', async ({ page }) => {

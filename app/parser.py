@@ -61,14 +61,26 @@ LABEL_PREFIX = re.compile(r"^\s*(?:[■□●•*#]+\s*|[一二三四五六七�
 
 
 def _norm(value: str) -> str:
+    # OCR may separate the domain and top-level suffix (e.g. example. invalid).
+    # Only repair an email-shaped token, never arbitrary periods in prose.
+    if "@" in value:
+        value = re.sub(
+            r"([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.)\s+([A-Za-z]{2,})\b",
+            r"\1\2", value,
+        )
     return re.sub(r"[\t \u00a0]+", " ", value).strip()
 
 
 def _section(line: str) -> str | None:
     label = LABEL_PREFIX.sub("", _norm(line))
     label = label.strip(" :：·—_-|【】[]")
+    # OCR commonly merges a short multi-word section label such as
+    # "Work Experience" into "WorkExperience". Exact whitelist only.
+    compact = re.sub(r"\s+", "", label).casefold()
     for group, candidates in SECTION_LABELS.items():
-        if label.lower() in candidates:
+        if label.casefold() in candidates or compact in {
+            re.sub(r"\s+", "", candidate).casefold() for candidate in candidates
+        }:
             return group
     return None
 
