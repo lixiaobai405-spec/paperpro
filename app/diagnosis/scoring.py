@@ -28,7 +28,10 @@ def load_rules() -> dict:
     ids = [x["id"] for x in data["factors"]]
     if len(ids) < 6 or len(ids) != len(set(ids)):
         raise ValueError("岗位维度规则表无效")
+    known_skills = set(data["factors"][0]["keywords"])
     for name, profile in data["profiles"].items():
+        if set(profile["expected_skills"]) - known_skills:
+            raise ValueError("岗位默认技能必须包含于公共技能词表：" + name)
         if set(profile["weights"]) != set(ids) or abs(sum(profile["weights"].values())-1) > 1e-7:
             raise ValueError("岗位权重必须完整且总和为 1: " + name)
         if any(v < 0 or v > 1 for v in profile["weights"].values()):
@@ -135,10 +138,21 @@ def _find(
     positive: bool = False,
 ) -> list[dict]:
     predicate = _positive_skill if positive else lambda ref, term: _contains(ref["original"], term)
-    return [
-        ref for ref in refs
-        if any(predicate(ref, term) for term in terms if term)
-    ][:limit]
+    matched = []
+    seen_claims = set()
+    for ref in refs:
+        if not any(predicate(ref, term) for term in terms if term):
+            continue
+        # Identical copied claims are one independent piece of evidence,
+        # irrespective of whether they occur in repeated projects/jobs.
+        normalized = re.sub(r"\s+", " ", ref["original"]).strip().casefold()
+        if normalized in seen_claims:
+            continue
+        seen_claims.add(normalized)
+        matched.append(ref)
+        if len(matched) >= limit:
+            break
+    return matched
 
 
 def _profile(role: str, rules: dict) -> tuple[str, dict]:

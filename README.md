@@ -27,7 +27,7 @@ PaperPro 现有两条独立但共用解析与设置基础设施的流程：**求
 
 五大结果分别是岗位匹配证据覆盖度（七类因子、0–1 系数与可配置权重）、工作经验时间线（相关任职去重月份与空档）、学习潜力证据信号、岗位针对性和有位置的核查疑点。默认纯本地确定性规则；DeepSeek 辅助解读只有明确同意后才会外发，且**只能选择规则表中的解释模板与已存在的证据路径**。自然语言由本地模板生成，不能覆盖算法算出的时间、得分或自行编写公司/学历事实。
 
-规则权重和高/中/低阈值仍属**初版假设**。已完成 48 个合成情景和 ±20% 权重扰动测试，但尚缺独立 HR 标注样本与真实筛选结果，**不能把分数写成录用概率或已验证的 HR 官方打分**。详情见 `docs/SCORING_METHODOLOGY.md` 和 `docs/R7_R10_CANDIDATE_DIAGNOSIS.md`。 已提供完全离线的专家评分评价脚本：`uv run --python 3.12 python -m scripts.evaluate_hr_dataset --input evaluation_private/hr_labels.json`；私密数据集不会被 Git 跟踪。
+规则权重和高/中/低阈值仍属**初版假设**。已完成 48 个合成层级情景、±20% 权重扰动测试，以及 1,680 组独立反事实关系的压力测试（`uv run --python 3.12 python -m scripts.stress_test_scoring`），据此修复了重复证据刷分和技能词表遗漏。但尚缺独立 HR 标注样本与真实筛选结果，**不能把分数写成录用概率或已验证的 HR 官方打分**。详情见 `docs/SCORING_METHODOLOGY.md` 和 `docs/R7_R10_CANDIDATE_DIAGNOSIS.md`。已提供完全离线的专家评分评价脚本：`uv run --python 3.12 python -m scripts.evaluate_hr_dataset --input evaluation_private/hr_labels.json`；私密数据集不会被 Git 跟踪。
 
 ## 经典简历编辑（/classic）
 

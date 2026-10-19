@@ -1,5 +1,5 @@
 {
-  "version": "candidate-rubric-0.2.0",
+  "version": "candidate-rubric-0.3.0",
   "status": "provisional_not_criterion_validated",
   "basis": [
     "job-analysis/content alignment (SIOP 2018, APA Fifth Principles)",
@@ -33,6 +33,7 @@
         "MySQL",
         "PostgreSQL",
         "Redis",
+        "Git",
         "Docker",
         "Kubernetes",
         "Linux",

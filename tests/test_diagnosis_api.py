@@ -215,7 +215,7 @@ def test_ai_only_adds_interpretation_to_fixed_rules_not_score(monkeypatch):
     assert body["dimensions"]["experience"]["ai_commentary"].startswith("时间线")
     assert "experience.0.heading" in body["dimensions"]["experience"]["ai_commentary"]
     assert requests[0][0]=="https://api.deepseek.com/v1/chat/completions"
-    assert requests[0][1]["json"]["messages"][0]["content"].count("candidate-rubric-0.2.0")>=1
+    assert requests[0][1]["json"]["messages"][0]["content"].count("candidate-rubric-0.3.0")>=1
     assert "EPHEMERAL_TEST_ONLY" not in result.text
 
 
