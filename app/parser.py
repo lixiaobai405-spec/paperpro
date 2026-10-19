@@ -74,14 +74,28 @@ def _norm(value: str) -> str:
 def _section(line: str) -> str | None:
     label = LABEL_PREFIX.sub("", _norm(line))
     label = label.strip(" :：·—_-|【】[]")
-    # OCR commonly merges a short multi-word section label such as
-    # "Work Experience" into "WorkExperience". Exact whitelist only.
-    compact = re.sub(r"\s+", "", label).casefold()
-    for group, candidates in SECTION_LABELS.items():
-        if label.casefold() in candidates or compact in {
-            re.sub(r"\s+", "", candidate).casefold() for candidate in candidates
-        }:
-            return group
+    # Match exact known labels, including OCR-joined "WorkExperience".
+    # Bilingual headings such as "工作经历 / Experience" are accepted only
+    # when BOTH halves independently name the SAME section. No arbitrary
+    # slash-separated resume text can create a section transition.
+    def category(heading: str) -> str | None:
+        compact = re.sub(r"\s+", "", heading).casefold()
+        for group, candidates in SECTION_LABELS.items():
+            if compact in {
+                re.sub(r"\s+", "", candidate).casefold() for candidate in candidates
+            }:
+                return group
+        return None
+
+    matched = category(label)
+    if matched:
+        return matched
+    pieces = [piece.strip(" :：·—_-【】[]") for piece
+              in re.split(r"\s*[/|｜]\s*", label)]
+    if len(pieces) == 2:
+        left, right = category(pieces[0]), category(pieces[1])
+        if left and left == right:
+            return left
     return None
 
 

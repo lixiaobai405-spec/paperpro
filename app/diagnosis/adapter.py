@@ -9,7 +9,7 @@ from .schema import CandidateResume, CareerEntry
 
 # Accept Chinese 年/月 notation and common English or symbolic delimiters.
 # Convert into YYYY.MM for the downstream calendar scorer.
-YEAR_MONTH = r"(?:19|20)\d{2}(?:[./-]\s*(?:0?[1-9]|1[0-2])|年\s*(?:0?[1-9]|1[0-2])\s*月?)"
+YEAR_MONTH = r"(?:19|20)\d{2}(?:[./-]\s*(?:1[0-2]|0?[1-9])|年\s*(?:1[0-2]|0?[1-9])\s*月?)"
 DATE_RANGE = re.compile(
     rf"(?P<start>{YEAR_MONTH})\s*(?:-|－|–|—|\u00ad|~|至|到|to)\s*"
     rf"(?P<end>{YEAR_MONTH}|至今|现在|present|current)",
@@ -41,6 +41,38 @@ def convert_resume(source: Resume, *, raw_text: str, fingerprint: str) -> Candid
         parts = re.split(r"\s*[|丨｜」]\s*", remaining, maxsplit=1)
         company = parts[0].strip() if parts else ""
         role = parts[1].strip() if len(parts) == 2 else ""
+        # Some CVs put position first: "2007.07-至今: 数据库工程师：公司".
+        # Require a recognizable job-title suffix + an explicit colon;
+        # otherwise keep uncertain text intact for human review.
+        if len(parts) == 1:
+            role_first = re.match(
+                r"^\s*[:：]?\s*(?P<role>[^:：]{2,55}?"
+                r"(?:工程师|经理|主管|总监|设计师|分析师|开发人员|专员|负责人|"
+                r"Engineer|Developer|Manager|Analyst|Designer))"
+                r"\s*[:：]\s*(?P<company>.+?)\s*$",
+                remaining, re.I,
+            )
+            if role_first:
+                role = role_first.group("role").strip()
+                company = role_first.group("company").strip()
+            elif match:
+                # A common dated CV heading is "YYYY.MM–YYYY.MM COMPANY ROLE",
+                # with whitespace but no bar/colon. Only split a recognizable
+                # *trailing job title*; never treat a generic company suffix
+                # like "工程师事务所" as a candidate's role.
+                trailing_role = re.match(
+                    r"^(?P<company>.+?)\s+(?P<role>"
+                    r"(?:[\u4e00-\u9fff]{2,30}"
+                    r"(?:工程师|经理|主管|总监|设计师|分析师|专员|负责人|助理|实习生)"
+                    r"|(?:[A-Za-z][A-Za-z0-9+./-]*\s+){0,3}"
+                    r"[A-Za-z][A-Za-z0-9+./-]*\s+"
+                    r"(?:Engineer|Developer|Manager|Analyst|Designer))"
+                    r")\s*$",
+                    remaining, re.I,
+                )
+                if trailing_role:
+                    company = trailing_role.group("company").strip()
+                    role = trailing_role.group("role").strip()
         converted.append(CareerEntry(
             heading=entry.heading, bullets=entry.bullets,
             company=company, role=role, start_date=start, end_date=end,
