@@ -19,6 +19,7 @@ from app.parser import extract_file
 from .adapter import convert_resume, from_text
 from .engine import run_diagnosis
 from .narrative import add_ai_explanations
+from .pdf_layout import augment_missing_fields_from_pdf
 from .schema import DiagnosisRequest, PasteRequest, SelectionRequest
 from .scoring import load_rules
 
@@ -60,6 +61,20 @@ async def parse_uploaded(file: UploadFile = File(...)):
     # Source SHA is of the exact uploaded bytes, not re-serialized content.
     from app.parser import parse_resume
     draft=convert_resume(parse_resume(text),raw_text=text,fingerprint=checksum)
+    if suffix==".pdf" and method=="pdf-text":
+        try:
+            draft,additional=augment_missing_fields_from_pdf(
+                draft,original,method=method,
+            )
+            if additional:
+                warnings.append(
+                    "检测到多栏排版：已从原文中辅助定位缺失的"
+                    + "、".join("姓名" if x=="name" else "教育背景" for x in additional)
+                    + "；请在校对页核实，不会自动更改原 PDF。"
+                )
+        except (ValueError,OSError,TypeError):
+            # The old deterministic parser is still the source of truth.
+            warnings.append("多栏辅助识别未完成；已保留常规解析结果，请人工核对。")
     return {"status":"ok","filename":Path(file.filename or "").name,
             "method":method,"sha256":checksum,"resume":draft.model_dump(),
             "source_text":text,"warnings":warnings}
