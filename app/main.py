@@ -15,9 +15,11 @@ from .exporter import make_docx, make_pdf
 from .models import EnhanceRequest, ExportRequest
 from .parser import MAX_UPLOAD_BYTES, extract_file, parse_resume
 from .settings import SettingsError, resolve_provider
+from .diagnosis.api import router as diagnosis_router
 
 
 app = FastAPI(title="PaperPro Resume Studio", version="0.1.0", docs_url="/api/docs", redoc_url=None)
+app.include_router(diagnosis_router)
 
 
 @app.exception_handler(RequestValidationError)

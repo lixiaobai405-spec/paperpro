@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('switching documents resets focused list drafts instead of leaking old resume skills', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   const skills = page.getByRole('textbox', { name: '专业技能' });
   await expect(skills).toContainText('Python');
@@ -44,7 +44,7 @@ test('switching documents resets focused list drafts instead of leaking old resu
 });
 
 test('changing target role during upload does not silently discard selected document', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   await expect(page.getByTestId('resume-preview')).toContainText('陈晓明');
 

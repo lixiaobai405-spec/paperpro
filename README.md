@@ -1,6 +1,6 @@
-# PaperPro · 智能简历工作台
+# PaperPro · 智能简历诊断与增强工作台
 
-本地运行的网页工具：导入 PDF、Word 或扫描图片，提取真实经历，编辑与润色内容，再使用固定 **PaperPro Classic A4** 模板导出 Word 和 PDF。
+PaperPro 现有两条独立但共用解析与设置基础设施的流程：**求职者端五维诊断**（默认入口）和**经典简历编辑**（保留原功能）。上传数据默认本机处理；从不自动改写用户上传的原始文件。
 
 ## 快速使用
 
@@ -21,7 +21,17 @@
 
 不得使用 Anaconda/Miniconda；Python 由 uv 管理。前端采用 React + Vite + Mantine + Tabler Icons，后端 FastAPI + RapidOCR + PyMuPDF + python-docx。Microsoft Word 负责高保真 DOCX→PDF 和旧版 DOC 读取；当 Word 不可用时有基础 PDF 备用引擎，极罕见非 BMP 字符会明确拒绝错误导出。
 
-## 使用流程
+## 求职者端 · 五步诊断（默认首页）
+
+地址：**http://127.0.0.1:8766/**。按 ① 上传 PDF/DOCX/DOC/PNG/JPG（单文件 10 MB）或粘贴文本 → ② 校对可编辑的公司、职位、年月、技能、教育和证书 → ③ 填写目标职位和/或目标公司（推荐附真实 JD） → ④ 查看五大 HR 视角诊断与溯源证据 → ⑤ 逐条勾选建议或核查问题、仅导出选中内容（TXT/PDF）。
+
+五大结果分别是岗位匹配证据覆盖度（七类因子、0–1 系数与可配置权重）、工作经验时间线（相关任职去重月份与空档）、学习潜力证据信号、岗位针对性和有位置的核查疑点。默认纯本地确定性规则；DeepSeek 辅助解读只有明确同意后才会外发，且**只能选择规则表中的解释模板与已存在的证据路径**。自然语言由本地模板生成，不能覆盖算法算出的时间、得分或自行编写公司/学历事实。
+
+规则权重和高/中/低阈值仍属**初版假设**。已完成 48 个合成情景和 ±20% 权重扰动测试，但尚缺独立 HR 标注样本与真实筛选结果，**不能把分数写成录用概率或已验证的 HR 官方打分**。详情见 `docs/SCORING_METHODOLOGY.md` 和 `docs/R7_R10_CANDIDATE_DIAGNOSIS.md`。 已提供完全离线的专家评分评价脚本：`uv run --python 3.12 python -m scripts.evaluate_hr_dataset --input evaluation_private/hr_labels.json`；私密数据集不会被 Git 跟踪。
+
+## 经典简历编辑（/classic）
+
+地址：**http://127.0.0.1:8766/classic**。
 
 1. 拖拽上传一个 PDF、DOCX、DOC、PNG 或 JPG（最大 12 MB；PDF 最多 25 页）。
 2. OCR 自动处理扫描图片和 PDF 内较大的图片文字。请核对识别提醒。
@@ -68,7 +78,9 @@
     cd frontend
     npm test -- --project=chromium
 
-测试使用本机已安装的 Google Chrome，不需要 Playwright 另装 Chromium。构建：进入 frontend 并执行 npm run build。
+测试使用本机已安装的 Google Chrome，不需要 Playwright 另装 Chromium。构建：进入 frontend 并执行 npm run build。2026-10-19 的新版五步流程与原编辑器共 **23 项 Chrome E2E 通过**；后端覆盖率 **90%**。原有 Word COM 测试仍可能打印 Windows RPC 异常，需在目标机器持续关注。
+
+**尚未通过真实数据验收：** 20 份授权简历的字段完整率、清晰手机照片 OCR 准确率、真实 iOS/Android 原生文件选择、两个其他智能体的风格走查、真实 HR 标注一致性及预测效度。不要以合成数据代替这些验收。
 
 DOCX/PDF 渲染验收使用合成数据，文件位于 artifacts/visual/（自动忽略版本控制，浏览器测试也不会将它们清除）。AI 接口除了模拟响应的回归测试，还在 2026-10-18 用一次真实 DeepSeek 后端请求和一次真实 Chrome 用户流程验收：均返回 HTTP 200，Chrome 实际生成 3 处建议、人工选择并应用、下载 Word/PDF。测试只发送虚构简历，密钥通过临时标准输入注入测试进程，没有保存到文件。此验收不意味着模型对任意简历都不会虚构事实，用户仍须审核。
 
@@ -76,6 +88,12 @@ DOCX/PDF 渲染验收使用合成数据，文件位于 artifacts/visual/（自�
 
 - **SPEC.md** — 需求、正确性约束、反例与验收标准
 - **app/parser.py** — Word/PDF/图片提取、OCR、结构化解析
+- **app/diagnosis/rules.json** — 五维判定条件、岗位族群、权重和阈值的共同规则源
+- **app/diagnosis/scoring.py** — 可复现岗位证据计分与任职时间去重
+- **app/diagnosis/calibration.py** — 合成排序、扰动、AHP/Swing 和独立 HR 标注评估
+- **app/diagnosis/engine.py** — 五大诊断、优化建议、面试核查清单
+- **app/diagnosis/api.py** — 10 MB 上传、粘贴解析、报告和选中项导出
+- **frontend/src/CandidateDiagnosisApp.jsx** — 视频参考样式的五步求职者端诊断页面
 - **app/models.py** — 履历结构与请求格式
 - **app/enhancer.py** — 本地清理与可选 AI 润色、数字检查
 - **app/exporter.py** — 唯一固定 Word 模板与 PDF 转换

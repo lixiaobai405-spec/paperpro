@@ -5,6 +5,8 @@ import '@mantine/core/styles.css';
 import '@mantine/dropzone/styles.css';
 import './styles.css';
 import App from './App.jsx';
+import CandidateDiagnosisApp from './CandidateDiagnosisApp.jsx';
+import './diagnosis.css';
 
 const theme = createTheme({
   primaryColor: 'indigo',
@@ -24,7 +26,7 @@ const theme = createTheme({
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <MantineProvider theme={theme}>
-      <App />
+      {window.location.pathname.startsWith('/classic') ? <App /> : <CandidateDiagnosisApp />}
     </MantineProvider>
   </React.StrictMode>,
 );

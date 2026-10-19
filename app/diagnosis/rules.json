@@ -1,0 +1,432 @@
+{
+  "version": "candidate-rubric-0.2.0",
+  "status": "provisional_not_criterion_validated",
+  "basis": [
+    "job-analysis/content alignment (SIOP 2018, APA Fifth Principles)",
+    "MCDA additive utility weighting with explicit assumptions and sensitivity testing",
+    "NIST AI RMF MEASURE: repeatability, representative evaluation, uncertainty, independent review"
+  ],
+  "limits": "This is an evidence-coverage score for an explicit or inferred job family, NOT hiring-probability nor a calibrated employer score. External validation with anonymized HR judgments is outstanding.",
+  "role_match_priority": ["product", "design", "data", "software"],
+  "thresholds": {
+    "high": 78,
+    "medium": 52
+  },
+  "coefficient": {
+    "present": 1,
+    "partial": 0.5,
+    "missing": 0
+  },
+  "factors": [
+    {
+      "id": "skills",
+      "label": "关键技能",
+      "keywords": [
+        "Python",
+        "Java",
+        "C++",
+        "Go",
+        "JavaScript",
+        "TypeScript",
+        "React",
+        "SQL",
+        "MySQL",
+        "PostgreSQL",
+        "Redis",
+        "Docker",
+        "Kubernetes",
+        "Linux",
+        "PyTorch",
+        "TensorFlow",
+        "Excel",
+        "Figma",
+        "CAD",
+        "ROS2",
+        "MuJoCo",
+        "数据分析",
+        "测试",
+        "运营",
+        "沟通",
+        "设计"
+      ],
+      "evidence_sources": [
+        "skills",
+        "experience",
+        "projects"
+      ],
+      "description": "关键词或明确技能证据，不等同实际掌握程度"
+    },
+    {
+      "id": "function",
+      "label": "岗位职能",
+      "keywords": [],
+      "evidence_sources": [
+        "title",
+        "experience",
+        "projects",
+        "summary"
+      ],
+      "description": "经历与目标岗位核心职能是否一致"
+    },
+    {
+      "id": "experience",
+      "label": "相关工作年限",
+      "keywords": [],
+      "evidence_sources": [
+        "experience"
+      ],
+      "description": "只使用明确年月的经历计算；未记录年限不可直接定性缺失能力"
+    },
+    {
+      "id": "projects",
+      "label": "相关项目成果",
+      "keywords": [],
+      "evidence_sources": [
+        "projects",
+        "experience"
+      ],
+      "description": "项目是否有岗位相关能力与实际承担事项"
+    },
+    {
+      "id": "education",
+      "label": "学历要求",
+      "keywords": [],
+      "evidence_sources": [
+        "education"
+      ],
+      "description": "只有明确要求时评分，否则使用中性系数"
+    },
+    {
+      "id": "industry",
+      "label": "行业相关性",
+      "keywords": [],
+      "evidence_sources": [
+        "experience",
+        "projects"
+      ],
+      "description": "只有JD明确行业方向时才严格对照"
+    },
+    {
+      "id": "leadership",
+      "label": "管理与协作范围",
+      "keywords": [],
+      "evidence_sources": [
+        "experience",
+        "projects"
+      ],
+      "description": "只有目标职级/JD提出管理要求时明确要求"
+    }
+  ],
+  "profiles": {
+    "software": {
+      "aliases": [
+        "后端",
+        "前端",
+        "开发",
+        "软件",
+        "backend",
+        "frontend",
+        "developer",
+        "software",
+        "sre",
+        "devops"
+      ],
+      "weights": {
+        "skills": 0.32,
+        "function": 0.19,
+        "experience": 0.15,
+        "projects": 0.16,
+        "education": 0.06,
+        "industry": 0.06,
+        "leadership": 0.06
+      },
+      "expected_months": 24,
+      "expected_skills": [
+        "Python",
+        "SQL",
+        "Git",
+        "Docker"
+      ],
+      "function_terms": [
+        "后端",
+        "前端",
+        "软件",
+        "接口",
+        "程序",
+        "服务端",
+        "系统开发",
+        "软件开发",
+        "服务器",
+        "backend",
+        "frontend",
+        "software",
+        "developer",
+        "devops",
+        "Python",
+        "Java"
+      ],
+      "project_terms": [
+        "后端",
+        "前端",
+        "软件",
+        "接口",
+        "API",
+        "数据库",
+        "服务端",
+        "架构",
+        "Docker",
+        "Python",
+        "Java",
+        "SQL",
+        "backend",
+        "frontend",
+        "software"
+      ],
+      "sector_terms": [
+        "互联网",
+        "软件",
+        "科技",
+        "技术"
+      ]
+    },
+    "data": {
+      "aliases": [
+        "数据",
+        "算法",
+        "机器学习",
+        "ai",
+        "data",
+        "algorithm",
+        "ml",
+        "scientist"
+      ],
+      "weights": {
+        "skills": 0.34,
+        "function": 0.18,
+        "experience": 0.13,
+        "projects": 0.17,
+        "education": 0.08,
+        "industry": 0.06,
+        "leadership": 0.04
+      },
+      "expected_months": 24,
+      "expected_skills": [
+        "Python",
+        "SQL",
+        "数据分析",
+        "PyTorch"
+      ],
+      "function_terms": [
+        "数据",
+        "分析",
+        "模型",
+        "算法",
+        "分析师",
+        "data",
+        "model",
+        "machine learning"
+      ],
+      "project_terms": [
+        "数据",
+        "模型",
+        "指标",
+        "实验",
+        "analysis"
+      ],
+      "sector_terms": [
+        "科技",
+        "数据",
+        "金融",
+        "互联网"
+      ]
+    },
+    "product": {
+      "aliases": [
+        "产品经理",
+        "产品运营",
+        "product",
+        "pm"
+      ],
+      "weights": {
+        "skills": 0.19,
+        "function": 0.26,
+        "experience": 0.17,
+        "projects": 0.15,
+        "education": 0.05,
+        "industry": 0.1,
+        "leadership": 0.08
+      },
+      "expected_months": 24,
+      "expected_skills": [
+        "数据分析",
+        "Excel",
+        "SQL"
+      ],
+      "function_terms": [
+        "产品",
+        "需求",
+        "用户",
+        "增长",
+        "product",
+        "requirement",
+        "roadmap"
+      ],
+      "project_terms": [
+        "需求",
+        "产品",
+        "上线",
+        "增长",
+        "迭代",
+        "用户"
+      ],
+      "sector_terms": [
+        "互联网",
+        "科技",
+        "电商",
+        "软件"
+      ]
+    },
+    "design": {
+      "aliases": [
+        "设计",
+        "交互",
+        "ux",
+        "ui",
+        "designer"
+      ],
+      "weights": {
+        "skills": 0.3,
+        "function": 0.21,
+        "experience": 0.12,
+        "projects": 0.22,
+        "education": 0.05,
+        "industry": 0.05,
+        "leadership": 0.05
+      },
+      "expected_months": 12,
+      "expected_skills": [
+        "Figma",
+        "设计"
+      ],
+      "function_terms": [
+        "设计",
+        "交互",
+        "视觉",
+        "ui",
+        "ux",
+        "design"
+      ],
+      "project_terms": [
+        "作品",
+        "设计",
+        "原型",
+        "视觉",
+        "体验"
+      ],
+      "sector_terms": [
+        "互联网",
+        "科技",
+        "设计"
+      ]
+    },
+    "general": {
+      "aliases": [],
+      "weights": {
+        "skills": 0.22,
+        "function": 0.22,
+        "experience": 0.16,
+        "projects": 0.16,
+        "education": 0.07,
+        "industry": 0.09,
+        "leadership": 0.08
+      },
+      "expected_months": 0,
+      "expected_skills": [],
+      "function_terms": [],
+      "project_terms": [],
+      "sector_terms": []
+    }
+  },
+  "narrative_codes": {
+    "experience": {
+      "timeline_review": "时间线只依据已校对的起止年月进行计算；建议核查未明确标注的任职和空档，避免在面试中产生歧义。",
+      "responsibility_proof": "任职时间与职责证据分开核实；建议准备实际承担任务、交付物及工作边界的说明。"
+    },
+    "potential": {
+      "growth_evidence": "潜力评级只代表简历证据覆盖程度；建议补充可核实的学习经历、技能更新和职责变化，不据此推测个人能力。",
+      "credential_review": "学历与证书属于可核查的事实，请以已取得的材料为准，不将尚未取得的资格写成既有成果。"
+    },
+    "motivation": {
+      "jd_alignment": "针对岗位时，请选取与真实职责匹配的项目证据，不添加未经证实的企业要求或求职动机。",
+      "company_context": "如已提供真实岗位描述，可按其要求组织原有经历；仅有公司名称不足以推断官方筛选标准。"
+    }
+  },
+  "date_policy": {
+    "short_stint_months": 6,
+    "gap_notice_days": 90,
+    "gap_high_days": 180,
+    "short_stint_penalty": 8,
+    "gap_penalty": 6,
+    "overlap_penalty": 4,
+    "uncertain_date_penalty": 0
+  },
+  "evidence_terms": {
+    "skill_update": ["学习了新技术", "技术迁移", "掌握新工具", "引入新框架", "技能提升", "技术升级", "培训后应用", "learned a new", "migrated to"],
+    "responsibility_growth": ["晋升", "职责扩大", "扩大负责范围", "从执行到独立", "从独立到带队", "promoted", "expanded responsibility"],
+    "metric": [
+      "%",
+      "％",
+      "提升",
+      "降低",
+      "增长",
+      "节省",
+      "改善",
+      "达成",
+      "耗时",
+      "小时",
+      "毫秒",
+      "ms",
+      "万",
+      "亿"
+    ],
+    "responsibility": [
+      "负责",
+      "设计",
+      "主导",
+      "构建",
+      "牵头",
+      "owner",
+      "designed",
+      "led",
+      "built"
+    ],
+    "leadership": [
+      "团队",
+      "带队",
+      "管理",
+      "管理者",
+      "lead",
+      "manager",
+      "负责人"
+    ],
+    "certificate": [
+      "证书",
+      "认证",
+      "certified",
+      "cfa",
+      "pmp",
+      "cet-6",
+      "六级"
+    ]
+  },
+  "priority": {
+    "high_conditions": [
+      "硬性要求在简历中未体现",
+      "岗位关键技能证据缺口",
+      "核心履历无具体职责",
+      "工作日期存在冲突"
+    ],
+    "high_cap": 4
+  },
+  "weighting_method": "job-family-dependent additive MCDA with normalized weights; numeric score is a content-coverage index, not a probability"
+}

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('editing comma-separated skills keeps the character being typed', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   const skills = page.getByRole('textbox', { name: '专业技能' });
   await skills.focus();
@@ -12,7 +12,7 @@ test('editing comma-separated skills keeps the character being typed', async ({ 
 });
 
 test('editing multi-line work details preserves newlines while typing', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   const bullets = page.getByTestId('工作经历').locator('textarea').first();
   await bullets.focus();
@@ -25,7 +25,7 @@ test('editing multi-line work details preserves newlines while typing', async ({
 });
 
 test('outdated enhancement response does not erase edits made after submission', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   let finishResponse;
   let received;
@@ -54,7 +54,7 @@ test('outdated enhancement response does not erase edits made after submission',
 
 for (const contextField of ['目标岗位（可选）', '岗位描述（可选）']) {
   test('editing ' + contextField + ' while AI runs must reject stale suggestions', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/classic');
     await page.getByTestId('demo-button').click();
     await page.getByText('AI 智能润色', { exact: true }).click();
     await page.getByRole('button', { name: 'AI 设置' }).click();
@@ -87,7 +87,7 @@ for (const contextField of ['目标岗位（可选）', '岗位描述（可选�
 }
 
 test('AI does not apply qualitative edits until explicit human approval', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   await page.getByText('AI 智能润色', { exact: true }).click();
   await page.getByRole('button', { name: 'AI 设置' }).click();

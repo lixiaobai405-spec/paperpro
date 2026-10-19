@@ -5,7 +5,7 @@ import path from 'node:path';
 test('home, demo, editor, fact confirmation and two real downloads', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  await page.goto('/');
+  await page.goto('/classic');
   await expect(page.getByText('让经历清晰，让机会')).toBeVisible();
   await expect(page.getByTestId('file-dropzone')).toBeVisible();
   await page.getByTestId('demo-button').click();
@@ -52,7 +52,7 @@ test('home, demo, editor, fact confirmation and two real downloads', async ({ pa
 });
 
 test('real scanned PNG browser upload follows extraction + edit workflow', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   const png = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 1500; canvas.height = 360;
@@ -72,7 +72,7 @@ test('real scanned PNG browser upload follows extraction + edit workflow', async
 });
 
 test('invalid upload exposes error instead of fake success', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.locator('input[type="file"]').first().setInputFiles({
     name: 'broken.pdf', mimeType: 'application/pdf', buffer: Buffer.from('this is not a PDF'),
   });
@@ -81,7 +81,7 @@ test('invalid upload exposes error instead of fake success', async ({ page }) =>
 });
 
 test('local enhancement does not require API and cannot bypass review gate', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   await page.getByTestId('review-checkbox').check();
   await page.getByTestId('enhance-button').click();
@@ -92,7 +92,7 @@ test('local enhancement does not require API and cannot bypass review gate', asy
 });
 
 test('external AI is gated on explicit consent', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   await page.getByText('AI 智能润色', { exact: true }).click();
   await page.getByTestId('enhance-button').click();
@@ -102,7 +102,7 @@ test('external AI is gated on explicit consent', async ({ page }) => {
 
 test('mobile viewport has no horizontal overflow and controls are reachable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   await expect(page.getByTestId('resume-preview')).toBeVisible();
   const positions = await page.evaluate(() => ({

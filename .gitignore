@@ -11,4 +11,6 @@ artifacts/visual/
 *.log
 .env
 settings.local.json
+# HR calibration datasets contain private resume facts; never commit.
+evaluation_private/
 *.pyc

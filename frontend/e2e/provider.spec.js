@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('switching providers clears the previous provider key and consent', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   await page.getByText('AI 智能润色', { exact: true }).click();
   await page.getByRole('button', { name: 'AI 设置' }).click();
@@ -18,7 +18,7 @@ test('switching providers clears the previous provider key and consent', async (
 });
 
 test('DeepSeek selected in UI sends only allowlisted provider name', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByTestId('demo-button').click();
   await page.getByText('AI 智能润色', { exact: true }).click();
   await expect(page.getByTestId('ai-provider')).toBeVisible();
