@@ -7,6 +7,68 @@ from app.diagnosis.synthetic_parse_bench import synthetic_parse_report
 from app.diagnosis.synthetic_ocr_bench import synthetic_ocr_report
 
 
+def test_contact_fields_survive_multicolumn_section_ordering():
+    from app.diagnosis.adapter import from_text
+
+    # A column-first PDF may place a recognized work heading above its
+    # contact information. Contact facts exist as literal source tokens;
+    # they must not disappear simply because the active section changed.
+    draft = from_text(
+        "实习经历Internship Experience\n"
+        "2023.03 - 2023.11 模拟企业 | 软件工程师\n"
+        "- 维护内部服务\n"
+        "2023.11 合成工程周报 13800138000\n"
+        "跨栏附注: user@example.invalid\n"
+    )
+    assert draft.phone == "13800138000"
+    assert draft.email == "user@example.invalid"
+    assert len(draft.experience) == 1
+    assert draft.experience[0].role == "软件工程师"
+    assert not any("13800138000" in row.heading for row in draft.experience)
+    assert any("13800138000" in item for item in draft.additional)
+    assert any("user@example.invalid" in item for item in draft.additional)
+
+    # Multiple different contacts without a header identity are ambiguous:
+    # don't silently pick an employer's contact over the applicant's.
+    ambiguous = from_text(
+        "工作经历\n2024.01 - 2024.03 模拟公司 | 工程师\n"
+        "demo1@example.invalid\n"
+        "demo2@example.invalid\n"
+        "13900139000\n"
+        "13700137000\n"
+    )
+    assert ambiguous.email == ""
+    assert ambiguous.phone == ""
+
+
+def test_concatenated_bilingual_section_heading_without_delimiter():
+    # Pinned external synthetic PDF has a short header in the form
+    # "实习经历Internship Experience" with no slash between languages.
+    # A question mentioning the same words must not become a heading.
+    from app.diagnosis.adapter import from_text
+    from app.parser import _section
+    assert _section("实习经历Internship Experience") == "experience"
+    assert _section("工作经历Work Experience") == "experience"
+    assert _section("教育背景Education") == "education"
+    assert _section("过往有哪些工作经历？") is None
+    assert _section("2024年在实习经历中收获很多") is None
+
+    text = (
+        "虚构候选人\n"
+        "教育背景Education\n"
+        "2020.09 - 2024.06 模拟学院 | 本科\n"
+        "实习经历Internship Experience\n"
+        "2023.07 - 2024.02 合成企业 | 数据分析师\n"
+        "- 用 SQL 处理团队提供的汇总数据\n"
+    )
+    draft = from_text(text)
+    assert len(draft.education) == 1
+    assert len(draft.experience) == 1
+    assert draft.experience[0].role == "数据分析师"
+    assert draft.experience[0].company == "合成企业"
+    assert draft.source_text == text
+
+
 def test_undelimited_company_then_job_title_in_dated_work_heading():
     # Independent source layout analysis: 18/23 missing roles occur next to
     # whitespace after the employer, without a pipe or colon. Mock entities

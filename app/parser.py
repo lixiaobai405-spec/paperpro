@@ -90,6 +90,18 @@ def _section(line: str) -> str | None:
     matched = category(label)
     if matched:
         return matched
+    # Exact bilingual heading without a separator:
+    # "实习经历Internship Experience". Require that BOTH halves are
+    # independently known aliases of the SAME section. Arbitrary text
+    # mentioning work experience must not trigger a section switch.
+    compact = re.sub(r"\s+", "", label).casefold()
+    for group, candidates in SECTION_LABELS.items():
+        cjk = [item for item in candidates if re.fullmatch(r"[\u4e00-\u9fff]+", item)]
+        latin = [re.sub(r"\s+", "", item).casefold() for item in candidates
+                 if re.fullmatch(r"[A-Za-z ]+", item)]
+        if any(compact == (zh.casefold() + en) for zh in cjk for en in latin):
+            return group
+
     pieces = [piece.strip(" :：·—_-【】[]") for piece
               in re.split(r"\s*[/|｜]\s*", label)]
     if len(pieces) == 2:
@@ -211,12 +223,38 @@ def parse_resume(text: str) -> Resume:
             if clean:
                 result.skills.append(clean)
     result.skills = _uniq(result.skills)
-    result.experience = _entry_group(parts["experience"])
+
+    # A two-column PDF may render the contact block after a heading for
+    # employment. Contact-bearing lines are not a new employment period:
+    # keep their exact text available for review, outside the chronology.
+    work_lines = []
+    for line in parts["experience"]:
+        if EMAIL.search(line) or CN_PHONE.search(line):
+            result.additional.append(line)
+        else:
+            work_lines.append(line)
+    result.experience = _entry_group(work_lines)
     result.projects = _entry_group(parts["projects"])
     result.education = _education_group(parts["education"])
     result.additional.extend(BULLET.sub("", line).strip() for line in parts["additional"])
     result.additional = _uniq(result.additional)
     result.links = _uniq(result.links)
+
+    # PDF multi-column read order can put a valid section heading before
+    # the contact column. Preserve literal, uniquely identifiable contact
+    # tokens regardless of which section was active when they were read.
+    # When multiple candidates appear without a header value, do not guess
+    # which address/number belongs to the applicant.
+    if not result.email:
+        emails = {match.group() for line in lines
+                  for match in EMAIL.finditer(line)}
+        if len(emails) == 1:
+            result.email = next(iter(emails))
+    if not result.phone:
+        mobiles = {match.group().strip() for line in lines
+                   for match in CN_PHONE.finditer(line)}
+        if len(mobiles) == 1:
+            result.phone = next(iter(mobiles))
     return result
 
 
