@@ -58,6 +58,31 @@ scripts/benchmark_layout_workblocks.py 实现相同开发池、相同独立 GT �
 
 输出仅为匿名汇总与数据集编号，不包含 PDF 原文、姓名、电话、公司或职位。GitHub 项目仓库未更新，外部原始数据不进 Git。
 
+## 后续消融：确认主要损失发生在语义章节适配
+
+仍用同一 15 份训练开发 PDF、32 组独立 GT；这是新增的阶段损失归因，不是对新的冻结集的测试。
+
+原生 PyMuPDF 文字行可找到 31/32 组公司及职位文本；PyMuPDF4LLM 1.28.2 版式 JSON 文字行可找到 29/32 组；但旧 JSON→WorkBlock 映射仅有 9/32 组进入同一区域。29 组保留的文本里有 20 组在后续区域适配阶段丢失。
+
+模型产生 91 个标题类型 box，但仅识别出 10 个工作章节。它的 section-header、title、chapter-header 是**排版类别而非必然的语义章节**。原来的保守适配器一律用它们终止当前工作区，导致大量误截断。
+
+仅在实验层新增 unknown_heading_policy="keep"（默认仍为 close），已知项目/教育章节始终终止工作区。实测：
+
+| 处理方式 | 同 WorkBlock 的 GT 配对 | 候选 WorkBlock | 缺少 GT 配对支持的候选 |
+|---|---:|---:|---:|
+| 旧版所有模型标题截断 | 9/32 | 9 | 0 |
+| 实验版只在已知其他章节处截断 | **17/32** | 27 | **11** |
+| 原生 PyMuPDF WorkBlock | **17/32** | 25 | 旧开发实验另行记录 |
+
+**新实验版与原生 PyMuPDF 命中完全相同的 17 组配对，两者并集仍为 17/32，相对原生引擎的独有增益为 0。** 额外 11 个候选没有当前 GT 配对证据，不得直接断定是假任职，但也不能自动采纳。默认策略不变、正式 API 和五维评分不变；不以本次消融对外宣称端到端解析准确率提高。
+
+复验：
+
+    uv run --python 3.12 --with 'pymupdf4llm==1.28.2' python -m scripts.diagnose_mature_layout_loss
+    uv run --python 3.12 python -m pytest tests/test_layout_workblocks.py tests/test_layout_loss_diagnostics.py -q
+
+不读取 36–40、41–60 或历史固定外部挑战集。GT 在候选生成后才读取，日志无原始履历和姓名。
+
 ## 下一最短有效路径
 
 1. 使用独立、此前未被用于定向修改的开发样本，对 Docling 的文档区域分类及章节归属进行**模型级**对照。需要评估实际安装/模型下载成本和 AGPL/商业许可边界。

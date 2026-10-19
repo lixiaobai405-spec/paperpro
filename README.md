@@ -47,6 +47,8 @@ PaperPro 现有两条独立但共用解析与设置基础设施的流程：**求
 
 **WorkBlock PDF 版式区域实验（未部署）：** PyMuPDF 原生坐标 WorkBlock 在开发池 21–35 的 15 份 PDF 上实现公司/职位同块共现 **17/32**，旧 Entry 原文同段为 **19/32**，两路有互补但不自动合并（见 `docs/WORKBLOCK_REGION_DEV_20261019.md`）。随后在不修改项目依赖的隔离环境中实测成熟版式解析器 **PyMuPDF4LLM 1.28.2**：其 JSON→WorkBlock 当前适配仅 **9/32**，低于原有方法，因此**不部署**。已记录 PyPI 2.0 空兼容包、双许可证限制和完整对照，见 `docs/LAYOUT_ENGINE_ISOLATED_20261019.md`。
 
+**成熟版式解析器损失归因（未部署）：** PyMuPDF4LLM JSON 中仍存在 29/32 组 GT 公司/职位文本，但旧适配器同块仅 9/32。实验性保留未知排版标题后恢复到 17/32，却与原生 PyMuPDF 的 17/32 完全重合，**无独有关系覆盖增益**，还新增 11 个缺少当前 GT 配对支持的候选区域，因此不推广。详见 `docs/LAYOUT_ENGINE_ISOLATED_20261019.md`。
+
 规则权重和高/中/低阈值仍属**初版假设**。已完成 48 个合成层级情景、±20% 权重扰动测试，以及 1,680 组独立反事实关系的压力测试（`uv run --python 3.12 python -m scripts.stress_test_scoring`），据此修复了重复证据刷分和技能词表遗漏。但尚缺独立 HR 标注样本与真实筛选结果，**不能把分数写成录用概率或已验证的 HR 官方打分**。详情见 `docs/SCORING_METHODOLOGY.md` 和 `docs/R7_R10_CANDIDATE_DIAGNOSIS.md`。已提供完全离线的专家评分评价脚本：`uv run --python 3.12 python -m scripts.evaluate_hr_dataset --input evaluation_private/hr_labels.json`；私密数据集不会被 Git 跟踪。
 
 ## 经典简历编辑（/classic）

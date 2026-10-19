@@ -70,7 +70,9 @@ def _validated_layout_lines(page: dict, index: int) -> list[dict]:
     return lines
 
 
-def _section_regions(lines: list[dict]) -> list[list[dict]]:
+def _section_regions(
+    lines: list[dict], *, unknown_heading_policy: str = "close"
+) -> list[list[dict]]:
     regions=[]
     active=None
     current=[]
@@ -78,10 +80,16 @@ def _section_regions(lines: list[dict]) -> list[list[dict]]:
         x["line_bbox"][1],x["line_bbox"][0]
     )):
         section=_section(line["source_line"])
-        if section or line["layout_section_header"]:
+        # A recognized section is a strong semantic boundary. A model-only
+        # "section-header" might instead be a styled company or job title;
+        # its handling is a deliberately isolated experimental variable.
+        should_close=bool(section) or (
+            bool(line["layout_section_header"])
+            and unknown_heading_policy=="close"
+        )
+        if should_close:
             if active=="experience" and current:
                 regions.append(current)
-            # Unknown heading can end a section; it cannot start employment.
             active=section
             current=[]
             continue
@@ -111,12 +119,16 @@ def _split_for_independent_sections(lines: list[dict]) -> float | None:
     return None
 
 
-def propose_workblocks_from_layout(layout_json: dict) -> dict:
+def propose_workblocks_from_layout(
+    layout_json: dict, *, unknown_heading_policy: str = "close"
+) -> dict:
     """Recognize only dated native-text work regions in optional layout JSON.
 
     Does not read GT and does not infer employer/role values. The caller owns
     original source-byte SHA and may check provenance before any display.
     """
+    if unknown_heading_policy not in ("close","keep"):
+        raise ValueError("Invalid unknown_heading_policy")
     if (not isinstance(layout_json,dict)
         or not isinstance(layout_json.get("pages"),list)
         or len(layout_json["pages"])>25):
@@ -140,7 +152,9 @@ def propose_workblocks_from_layout(layout_json: dict) -> dict:
         })
         for lane in lanes:
             selected=[line for line in lines if _lane_of(line,split)==lane]
-            for region in _section_regions(selected):
+            for region in _section_regions(
+                selected,unknown_heading_policy=unknown_heading_policy
+            ):
                 anchors=[
                     (line,_date_candidate(line["source_line"]))
                     for line in region
@@ -191,6 +205,7 @@ def propose_workblocks_from_layout(layout_json: dict) -> dict:
         "layout_pages":pages,
         "workblocks":proposed,
         "candidate_count":len(proposed),
+        "experimental_unknown_heading_policy":unknown_heading_policy,
         "automatic_resume_mutation":False,
         "deployed":False,
         "requires_human_confirmation":True,

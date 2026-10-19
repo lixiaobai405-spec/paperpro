@@ -100,3 +100,32 @@ def test_bad_bbox_or_missing_text_lines_does_not_forge_employment():
     assert result["workblocks"][0]["dates"]["start"]=="2023.03"
     with pytest.raises(ValueError):
         propose_workblocks_from_layout({"pages":[{"width":0,"height":842,"boxes":[]}]})
+
+
+def test_unknown_typographic_heading_policy_is_non_deployed_and_optional():
+    fixture=_layout()
+    fixture["pages"][0]["boxes"].insert(
+        9,_box("未分类的中间标题",36,235,kind="section-header")
+    )
+    # Existing conservative behavior remains the default, regardless of
+    # whether a more exploratory reading-order policy is tried.
+    old=propose_workblocks_from_layout(fixture)
+    assert len(old["workblocks"])==1
+    exploration=propose_workblocks_from_layout(
+        fixture,unknown_heading_policy="keep"
+    )
+    assert exploration["candidate_count"]==2
+    assert exploration["deployed"] is False
+    assert exploration["automatic_resume_mutation"] is False
+    assert exploration["experimental_unknown_heading_policy"]=="keep"
+    assert all(x["status"]=="unverified" and x["auto_promote"] is False
+               for x in exploration["workblocks"])
+
+    # A *known* different section (project) always cuts the region,
+    # regardless of arbitrary font/header classification.
+    assert all("虚构校园项目甲" not in x["source_text"]
+               for x in exploration["workblocks"])
+    with pytest.raises(ValueError,match="policy"):
+        propose_workblocks_from_layout(
+            fixture,unknown_heading_policy="auto_accept"
+        )
