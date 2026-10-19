@@ -46,6 +46,8 @@ Back/forward retains state. New file or meaningful edit invalidates a previous r
 - Added rule version 0.3.0 synthetic counterfactual validation: 1,680 pairs over 3 fixed seeds × 4 job families × 7 invariants × 20 JD variations; all expected monotonicity/invariance constraints pass. New failures actually found and fixed: duplicate project claims, duplicate work periods boosting project score, and Git JD keyword missing from the shared factor vocabulary. This is not external HR validity.
 - Core backend/diagnosis and 25 Chrome E2E tests green as of 2026-10-19. Full Python suite ran to completion with 90% coverage but emitted legacy Windows Word COM RPC exceptions; this remains a platform observation, not a claim of fault-free native COM operation.
 - Watchdog registration was attempted via controlled API; its observed state is `connected=false`, `persistent_turn_identity_unavailable` and must not be portrayed as live supervision.
+- Extended R7/R8 simulated format QA: 20 DOCX/PDF ×13 fields => 260/260; 4 synthetic scan images ×13 fields => 49/52 after safe OCR text normalization. Actual iOS/Android gallery hardware remains unvalidated; see docs/SYNTHETIC_PARSER_QA.md.
+- R7-5/R7-6 advice now separates actual evidence gaps (`需要修正`) from optional improvements (`可选深化`). A fully dated, well-evidenced résumé no longer receives unsupported allegations of missing dates or metric baselines; exports retain each advice category. At least 8 suggestions and no rewriting of the original file remain enforced.
 - No external DeepSeek expense was incurred for this development slice; do not push GitHub until explicitly requested.
 
 Do not push GitHub until explicitly requested. Use branch feat/r7-r10-candidate-diagnostics.

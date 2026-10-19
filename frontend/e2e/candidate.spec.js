@@ -26,6 +26,7 @@ test('candidate wizard: pasted resume, editable fields, target gate, five dimens
   await expect(page.getByText(/不是实际企业录用概率/)).toBeVisible();
   await page.getByTestId('candidate-next-todo').click();
   await expect(page.getByTestId('advice-advice-01')).toBeVisible();
+  await expect(page.getByText('可选深化', { exact: true }).first()).toBeVisible();
   const checkboxes = page.getByTestId('advice-advice-01').locator('input[type="checkbox"]');
   await checkboxes.check();
   const firstTitle = await page.getByTestId('advice-advice-01').locator('strong').first().textContent();

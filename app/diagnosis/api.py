@@ -131,7 +131,8 @@ def export_selected(payload: SelectionRequest):
                 f"{index}. [{item.get('priority','中')}] {title}\n"
                 f"位置：{item.get('location','')}\n"
                 f"原文：{item.get('original','')}\n"
-                f"问题：{item.get('problem','')}\n"
+                f"建议类别：{item.get('assessment','需要修正')}\n"
+                f"{'优化机会' if item.get('assessment')=='可选深化' else '问题'}：{item.get('problem','')}\n"
                 f"建议：{item.get('action','')}\n"
                 f"示例（不得视为真实经历）：{item.get('example','')}\n"
             )

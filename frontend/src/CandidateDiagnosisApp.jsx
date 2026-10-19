@@ -554,12 +554,12 @@ export default function CandidateDiagnosisApp() {
           <StepTitle code="05" title="选择你真正认可的优化建议">报告不代写整篇简历。只勾选你认为有用且符合事实的改进项，再生成个人待办清单。</StepTitle>
           <Panel title="优化建议清单" extra={<Status text={selected.length+' / '+suggestions.length+' 已勾选'} color="indigo"/>}>
             {suggestions.map(s=><div className="diag-advice" key={s.id} data-testid={'advice-'+s.id}>
-              <Checkbox checked={selected.includes(s.id)} label={<Group gap="sm"><Status text={s.priority+'优先级'} color={s.priority==='高'?'orange':s.priority==='中'?'blue':'gray'}/><strong>{s.title}</strong></Group>}
+              <Checkbox checked={selected.includes(s.id)} label={<Group gap="sm"><Status text={s.priority+'优先级'} color={s.priority==='高'?'orange':s.priority==='中'?'blue':'gray'}/><Status text={s.assessment||'需要修正'} color={s.assessment==='可选深化'?'gray':'orange'}/><strong>{s.title}</strong></Group>}
                 onChange={e=>checkboxSetter(selected,setSelected,s.id,e.currentTarget.checked)}/>
               <div className="diag-advice-body">
                 <Text size="xs" c="dimmed">定位：{s.location}</Text>
                 <Text size="sm">原文：{s.original}</Text>
-                <Text size="sm"><strong>问题：</strong>{s.problem}</Text>
+                <Text size="sm"><strong>{s.assessment==='可选深化'?'优化机会：':'问题：'}</strong>{s.problem}</Text>
                 <Text size="sm"><strong>建议：</strong>{s.action}</Text>
                 <div className="diag-example"><strong>局部示例（不是事实陈述）</strong><div>{s.example}</div></div>
               </div>

@@ -213,6 +213,14 @@ def _advice(resume: CandidateResume, target: Target, dimensions: dict) -> list[d
     missing_hard=[r for r in match.get("requirements",[]) if r["status"]=="简历未体现"
                   and r["id"] in {"skills","function","experience"}]
     weak_ids={r["id"] for r in missing_hard}
+    matched={item["id"]:item for item in match.get("requirements",[])}
+    verification_issues=dimensions.get("verification",{}).get("issues",[])
+    metric_issues=[issue for issue in verification_issues if issue.get("type")=="成果计算口径可追问"]
+    timeline_issues=[issue for issue in verification_issues
+                     if issue.get("id","").startswith(("timeline-","undated-"))]
+    has_work_details=any(
+        len(text.strip()) >= 10 for entry in resume.experience for text in entry.bullets
+    )
     templates=[
         ("岗位定位不明确","title","现有职位表述与目标岗位之间缺少直接连接。",
          "在求职方向写明实际匹配的岗位方向。",
@@ -244,9 +252,60 @@ def _advice(resume: CandidateResume, target: Target, dimensions: dict) -> list[d
     ]
     advice=[]
     for i,(title,group,problem,action,example,priority) in enumerate(templates,1):
+        assessment="需要修正"
         ref=first([group,"summary"] if group != "skills" else ["skills.0","summary"])
+        if i==1 and resume.title.strip() and "function" not in weak_ids:
+            assessment="可选深化";priority="低"
+            problem="已经填写当前职位或求职方向；可进一步核对与目标岗位的实际关联，避免空泛的定位。"
+        elif i==2:
+            skill=matched.get("skills")
+            if skill and skill["coefficient"]>=0.75:
+                assessment="可选深化";priority="低"
+                problem="已展示较多岗位相关技能证据；可选择最重要的一项补充实际应用方式。"
+            elif skill and skill["coefficient"]>0:
+                priority="中"
+                problem="部分目标技能有书面证据，另一些仍需按真实使用经历补充。"
+        elif i==3 and len(resume.summary.strip())>=30:
+            assessment="可选深化";priority="低"
+            problem="已有较完整的个人概述；可选择最切合目标岗位的真实经历置于开头。"
+        elif i==4:
+            if has_work_details and "experience" not in weak_ids:
+                assessment="可选深化";priority="低"
+                problem="已填写具体工作职责；可按目标岗位需要提高重点交付物的可核查性。"
+            elif not has_work_details:
+                priority="高" if target.role.strip() else "中"
+                problem="简历中尚未展示可核对的工作或实习职责；可能影响岗位经验的初步判读。"
+        elif i==5:
+            project=matched.get("projects")
+            if project and project["coefficient"]>=0.5:
+                assessment="可选深化";priority="低"
+                problem="已有与岗位部分相关的项目证据，可进一步说明个人责任边界及交付方式。"
+        elif i==6:
+            if metric_issues:
+                issue=metric_issues[0]
+                ref={"path":issue["location"],"original":issue["original"]}
+                problem=issue["reason"]
+            else:
+                assessment="可选深化";priority="低"
+                problem="当前没有触发成果统计口径存疑规则；可选补充更多能够证明的交付证据。"
+        elif i==7:
+            if timeline_issues:
+                issue=timeline_issues[0]
+                ref={"path":issue["location"],"original":issue["original"]}
+                problem=issue["reason"]
+            else:
+                assessment="可选深化";priority="低"
+                problem="已提供的工作起止年月未触发时间冲突或明显空档提示；导出前可再次核对。"
+        elif i==8:
+            if resume.certificates:
+                assessment="可选深化"
+                problem="已列出证书或认证信息；可在确有必要时补充取得日期与认证机构。"
+        elif i==9 and dimensions.get("motivation",{}).get("rating")=="高":
+            assessment="可选深化";priority="低"
+            problem="已出现目标岗位的针对性表达；可进一步核实与岗位描述的具体联系。"
         advice.append({
             "id":f"advice-{i:02d}","title":title,
+            "assessment":assessment,
             "priority":priority,"location":ref["path"],"original":ref["original"],
             "problem":problem,"action":action,"example":example,
             "target":(target.role or target.company),
