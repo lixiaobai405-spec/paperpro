@@ -91,3 +91,7 @@
     cd frontend && npm test -- --project=chromium e2e/candidate.spec.js -g "PDF work-role suggestions"
 
 固定外部基准仍为 **167/276（60.51%）**；实验仅补齐“用户决定前不把几何假设写成个人履历事实”的工程闭环。对外不能宣传自动职位识别准确率增加。本轮不涉及收费 AI、真实 HR 标签或直接采集牛客个人简历。
+
+**R7-2 候选的数据契约（后续结构化模型接口）**：`WorkRelationHint`（`app/diagnosis/schema.py`）固定 `field_path=experience.N.role`、对应的 `source_path=experience.N.heading`、`status=unverified`、PDF `page_index/page_number` 及 `date/employer/role` 三个 0–1 坐标框。`confidence` 明确记录 `tier=low`、`calibrated=false`、`semantic_check=not_verified` 和可核实的结构信号；**这里的低等级不是训练模型输出，更不是经过校准的录用概率**。校对页可展示页码和文字块位置，采纳之前不会更改任职记录、任期、分数，变更已有记录会使旧候选失效。
+
+在同一固定 20 份外部合成 PDF 上执行 `scripts/profile_work_relation_gates.py`，仍仅生成 1 条候选：其坐标和字段归属合法（1/1），但与独立职位＋公司配对标注不一致（0/1）。因此保留为**低证据强度、需人工确认**，而不使用小样本对这个等级宣称统计校准。相关后端反例测试：`tests/test_work_relation_geometry.py`；浏览器测试：`frontend/e2e/candidate.spec.js`。

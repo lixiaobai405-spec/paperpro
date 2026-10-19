@@ -12,6 +12,7 @@ import re
 import pymupdf
 
 from .adapter import DATE_RANGE, _normalized_month
+from .schema import WorkRelationHint
 
 ORG_SUFFIX = re.compile(
     r"(?:有限公司|股份公司|集团|公司|事务所|研究院|研究所|学校|大学|医院|"
@@ -80,6 +81,23 @@ def _candidate_row(row: list[dict]) -> tuple[str,str,str,str] | None:
             company,position)
 
 
+def _normalized_box(span: dict, page: pymupdf.Page) -> tuple[float, float, float, float] | None:
+    """Use the same 0–1 physical coordinate system for every page."""
+    if page.rect.width <= 0 or page.rect.height <= 0:
+        return None
+    values = (
+        span["x0"] / page.rect.width,
+        span["y0"] / page.rect.height,
+        span["x1"] / page.rect.width,
+        span["y1"] / page.rect.height,
+    )
+    result = tuple(round(min(1.0, max(0.0, value)), 5) for value in values)
+    if not (0 <= result[0] < result[2] <= 1
+            and 0 <= result[1] < result[3] <= 1):
+        return None
+    return result
+
+
 def propose_existing_work_relations(
     candidate, pdf_bytes: bytes, *, method: str
 ) -> list[dict]:
@@ -99,7 +117,7 @@ def propose_existing_work_relations(
     with pymupdf.open(stream=pdf_bytes,filetype="pdf") as pdf:
         if len(pdf)>25:
             return []
-        for page in pdf:
+        for page_index,page in enumerate(pdf):
             for row in _visual_rows(page):
                 fields=_candidate_row(row)
                 if not fields:
@@ -108,9 +126,28 @@ def propose_existing_work_relations(
                 row_text=" ".join(s["text"] for s in row)
                 if _compact(row_text) not in source_norm:
                     continue
-                choices.setdefault((start,end,_compact(row_text)),set()).add(
-                    (employer,position)
-                )
+                boxes = {
+                    field:_normalized_box(span,page)
+                    for field,span in zip(("date","employer","role"),row)
+                }
+                if any(box is None for box in boxes.values()):
+                    continue
+                evidence={
+                    "source_kind":"native_pdf_text",
+                    "page_index":page_index,
+                    "page_number":page_index+1,
+                    "boxes":boxes,
+                }
+                key=(start,end,_compact(row_text))
+                candidates=choices.setdefault(key,[])
+                if not any(
+                    item["company"]==employer and item["role"]==position
+                    for item in candidates
+                ):
+                    candidates.append({
+                        "company":employer,"role":position,
+                        "evidence":evidence,
+                    })
     proposals=[]
     used=set()
     for i,entry in enumerate(candidate.experience):
@@ -121,23 +158,42 @@ def propose_existing_work_relations(
             (key,value) for key,values in choices.items()
             if key[0]==entry.start_date and key[1]==entry.end_date
             and key[2]==head for value in values
-            if _compact(value[0]) in _compact(entry.company)
-            and _compact(value[1]) in _compact(entry.company)
+            if _compact(value["company"]) in _compact(entry.company)
+            and _compact(value["role"]) in _compact(entry.company)
         ]
         if len(options)!=1 or options[0][0] in used:
             continue
-        key,(employer,position)=options[0]
+        key,value=options[0]
         if sum(_compact(item.heading)==head for item in candidate.experience)!=1:
             continue
         used.add(key)
-        proposals.append({
+        # These signals demonstrate layout alignment, not semantic truth.
+        # The pinned external set has a known false positive even with all
+        # signals; NEVER convert these into a probability or auto-adopt them.
+        proposal=WorkRelationHint.model_validate({
             "id":f"work-relation-{i}",
             "experience_index":i,
+            "field_path":f"experience.{i}.role",
             "source_path":f"experience.{i}.heading",
             "source_heading":entry.heading,
-            "suggested_company":employer,
-            "suggested_role":position,
+            "suggested_company":value["company"],
+            "suggested_role":value["role"],
             "status":"unverified",
             "note":"仅为同行文字块排版候选，不能证明职位事实；人工确认前不写入简历，也不参与评分。",
+            "evidence":value["evidence"],
+            "confidence":{
+                "tier":"low",
+                "calibrated":False,
+                "semantic_check":"not_verified",
+                "signals":[
+                    "horizontal_alignment",
+                    "existing_dated_experience",
+                    "same_source_text",
+                    "organization_suffix",
+                    "unique_existing_record",
+                ],
+                "missing":["independent_role_confirmation"],
+            },
         })
+        proposals.append(proposal.model_dump())
     return proposals

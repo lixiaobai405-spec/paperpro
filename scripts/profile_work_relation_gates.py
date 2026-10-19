@@ -34,9 +34,23 @@ def run(ids=IDS):
             for hint in hints:
                 record=draft.experience[hint["experience_index"]]
                 if not (hint["status"]=="unverified" and
-                        hint["source_heading"]==record.heading and
+                        hint["field_path"]==f"experience.{hint['experience_index']}.role"
+                        and hint["source_heading"]==record.heading and
                         record.role=="" and record.start_date and record.end_date):
                     raise AssertionError("Hint lacks the required provenance boundary")
+                source=hint["evidence"]
+                quality=hint["confidence"]
+                if not (source["page_number"]==source["page_index"]+1 and
+                        source["source_kind"]=="native_pdf_text" and
+                        set(source["boxes"])=={"date","employer","role"} and
+                        all(0<=box[0]<box[2]<=1 and 0<=box[1]<box[3]<=1
+                            for box in source["boxes"].values()) and
+                        quality["tier"]=="low" and
+                        quality["calibrated"] is False and
+                        quality["semantic_check"]=="not_verified"):
+                    raise AssertionError("Hint misrepresents spatial evidence or confidence")
+                summary["valid_source_anchors"]+=1
+                summary["explicitly_uncalibrated"]+=1
                 matched=any(
                     normalized(item.get("position",""))==normalized(hint["suggested_role"])
                     and normalized(item.get("companyName",""))==normalized(hint["suggested_company"])

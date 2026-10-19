@@ -319,10 +319,20 @@ test('PDF work-role suggestions remain unscored until human accepts, and can be 
   const hints = [
     {id:'work-relation-0',experience_index:0,source_path:'experience.0.heading',
      source_heading:heading0,suggested_company:'虚构技术有限公司',
-     suggested_role:'平台运营',status:'unverified',note:'未经核实的候选'},
+     suggested_role:'平台运营',status:'unverified',note:'未经核实的候选',
+     evidence:{page_index:0,page_number:1,source_kind:'native_pdf_text',
+       boxes:{date:[.07,.25,.27,.27],employer:[.3,.25,.59,.27],role:[.68,.25,.84,.27]}},
+     confidence:{tier:'low',calibrated:false,semantic_check:'not_verified',
+       signals:['horizontal_alignment','existing_dated_experience'],
+       missing:['independent_role_confirmation']}},
     {id:'work-relation-1',experience_index:1,source_path:'experience.1.heading',
      source_heading:heading1,suggested_company:'合成软件有限公司',
-     suggested_role:'业务分析',status:'unverified',note:'未经核实的候选'},
+     suggested_role:'业务分析',status:'unverified',note:'未经核实的候选',
+     evidence:{page_index:1,page_number:2,source_kind:'native_pdf_text',
+       boxes:{date:[.07,.25,.27,.27],employer:[.3,.25,.59,.27],role:[.68,.25,.84,.27]}},
+     confidence:{tier:'low',calibrated:false,semantic_check:'not_verified',
+       signals:['horizontal_alignment','existing_dated_experience'],
+       missing:['independent_role_confirmation']}},
   ];
   await page.route('**/api/diagnosis/parse', async route =>
     route.fulfill({
@@ -339,6 +349,10 @@ test('PDF work-role suggestions remain unscored until human accepts, and can be 
     buffer:Buffer.from('%PDF-1.4\n% synthetic fixture\n'),
   });
   await expect(page.getByTestId('candidate-work-hints')).toBeVisible();
+  await expect(page.getByTestId('work-hint-work-relation-0')).toContainText('低置信度 · 未经校准');
+  await expect(page.getByTestId('work-hint-work-relation-0')).toContainText('PDF 第 1 页');
+  await expect(page.getByTestId('work-hint-work-relation-0')).toContainText('职位文字块定位');
+  await expect(page.getByTestId('work-hint-work-relation-1')).toContainText('PDF 第 2 页');
   await expect(page.getByTestId('experience-role-0')).toHaveValue('');
   await expect(page.getByTestId('experience-company-0')).toHaveValue(
     '虚构技术有限公司 平台运营'

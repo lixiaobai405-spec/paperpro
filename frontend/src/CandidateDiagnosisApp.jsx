@@ -495,10 +495,22 @@ export default function CandidateDiagnosisApp() {
             </Alert>
             {reviewHints.map(h=><Paper key={h.id} p="md" mb="sm" withBorder radius="md"
               data-testid={'work-hint-'+h.id}>
-              <Text size="xs" c="dimmed">原文位置：{h.source_path}</Text>
+              <Group gap="xs" wrap="wrap">
+                <Status text="低置信度 · 未经校准" color="gray"/>
+                <Status text="等待人工核实" color="orange"/>
+              </Group>
+              <Text size="xs" c="dimmed" mt={8}>
+                原文位置：{h.source_path}
+                {h.evidence?.page_number ? ' · PDF 第 '+h.evidence.page_number+' 页' : ''}
+              </Text>
+              {h.evidence?.boxes?.role&&<Text size="xs" c="dimmed">
+                职位文字块定位：横向 {Math.round(h.evidence.boxes.role[0]*100)}%–{Math.round(h.evidence.boxes.role[2]*100)}%，
+                纵向 {Math.round(h.evidence.boxes.role[1]*100)}%–{Math.round(h.evidence.boxes.role[3]*100)}%
+              </Text>}
               <Text size="sm" mt={5}>原文：{h.source_heading}</Text>
               <Text size="sm" fw={600} mt={5}>候选机构：{h.suggested_company}</Text>
               <Text size="sm" fw={600}>候选职位：{h.suggested_role}</Text>
+              <Text size="xs" c="dimmed">同行排版属于弱证据，未经过语义核查；不表示真实任职或评分概率。</Text>
               <Group mt="sm" gap="xs">
                 <Button size="xs" onClick={()=>acceptWorkHint(h)}
                   data-testid={'accept-'+h.id}>已核对，采纳到表单</Button>

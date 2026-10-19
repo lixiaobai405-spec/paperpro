@@ -114,3 +114,90 @@ def test_semantically_false_but_geometrically_plausible_title_needs_review():
     assert response["review_hints"][0]["suggested_role"]=="陶艺爱好"
     assert response["resume"]==_baseline(data).model_dump()
     assert response["resume"]["experience"][0]["role"]==""
+
+
+
+def test_hint_has_field_target_page_bbox_and_uncalibrated_evidence_contract():
+    hint = _upload(_pdf())["review_hints"][0]
+    assert hint["field_path"] == "experience.0.role"
+    assert hint["source_path"] == "experience.0.heading"
+    assert hint["evidence"]["page_index"] == 0
+    assert hint["evidence"]["page_number"] == 1
+    assert hint["evidence"]["source_kind"] == "native_pdf_text"
+    assert set(hint["evidence"]["boxes"]) == {"date", "employer", "role"}
+    for box in hint["evidence"]["boxes"].values():
+        assert len(box) == 4
+        assert 0 <= box[0] < box[2] <= 1
+        assert 0 <= box[1] < box[3] <= 1
+    assert hint["confidence"]["calibrated"] is False
+    assert hint["confidence"]["tier"] == "low"
+    assert "horizontal_alignment" in hint["confidence"]["signals"]
+    assert "existing_dated_experience" in hint["confidence"]["signals"]
+    assert "independent_role_confirmation" in hint["confidence"]["missing"]
+    assert hint["status"] == "unverified"
+
+
+def test_plausible_but_semantically_false_hobby_is_never_high_confidence():
+    hint = _upload(_pdf(role="陶艺爱好"))["review_hints"][0]
+    assert hint["confidence"]["calibrated"] is False
+    assert hint["confidence"]["tier"] == "low"
+    assert hint["confidence"]["semantic_check"] == "not_verified"
+    assert hint["suggested_role"] == "陶艺爱好"
+
+
+def test_existing_roles_have_no_invasive_suggestions_or_provenance_changes():
+    data = _pdf()
+    baseline = _baseline(data).model_dump()
+    assert baseline["source_sha256"] == sha256(data).hexdigest()
+    result = _upload(data)
+    assert result["resume"] == baseline
+    assert result["sha256"] == sha256(data).hexdigest()
+    assert all(h["status"] == "unverified" for h in result["review_hints"])
+
+
+
+def test_second_pdf_page_coordinates_reference_correct_page():
+    source = _pdf()
+    doc = pymupdf.open(stream=source, filetype="pdf")
+    cover = doc.new_page(pno=0, width=595, height=842)
+    cover.insert_text((48, 50), "COVER PAGE FOR PDF GEOMETRY TEST", fontsize=11)
+    data = doc.tobytes()
+    doc.close()
+    hints = _upload(data)["review_hints"]
+    assert len(hints) == 1
+    assert hints[0]["evidence"]["page_index"] == 1
+    assert hints[0]["evidence"]["page_number"] == 2
+    assert hints[0]["evidence"]["boxes"]["role"][0] > 0
+
+
+def test_invalid_or_mismatched_anchor_cannot_pass_the_response_schema():
+    import copy
+    import pytest
+    from pydantic import ValidationError
+    from app.diagnosis.schema import WorkRelationHint
+
+    valid = _upload(_pdf())["review_hints"][0]
+    WorkRelationHint.model_validate(valid)
+    mutations = [
+        ("field_path", "experience.3.role"),
+        ("status", "confirmed"),
+    ]
+    for key, bad in mutations:
+        modified = {**valid, key:bad}
+        with pytest.raises(ValidationError):
+            WorkRelationHint.model_validate(modified)
+
+    modified = copy.deepcopy(valid)
+    modified["evidence"]["page_number"] = 13
+    with pytest.raises(ValidationError):
+        WorkRelationHint.model_validate(modified)
+
+    modified = copy.deepcopy(valid)
+    modified["evidence"]["boxes"]["role"] = [-0.1, 0.2, 1.1, 0.4]
+    with pytest.raises(ValidationError):
+        WorkRelationHint.model_validate(modified)
+
+    modified = copy.deepcopy(valid)
+    modified["confidence"]["calibrated"] = True
+    with pytest.raises(ValidationError):
+        WorkRelationHint.model_validate(modified)
