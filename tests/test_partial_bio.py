@@ -149,3 +149,161 @@ def test_real_cli_benchmark_prints_only_aggregate_and_keeps_holdouts_closed():
     assert "source_line" not in completed.stdout
     assert "annotation_text" not in completed.stdout
     assert "手机号" not in completed.stdout
+
+
+
+def _contact_fixture(*, duplicate_email: bool=False, shared: bool=False):
+    import pymupdf
+    doc=pymupdf.open(stream=_single_line_doc(),filetype="pdf")
+    page=doc[0]
+    page.insert_font(fontname="CN",fontfile="C:/Windows/Fonts/simhei.ttf")
+    email="lab@example.invalid"
+    page.insert_text((48,164),"2023.01 接触记录 "+email,
+                     fontsize=11,fontname="CN")
+    page.insert_text((48,199),"联系方法 +86 138-0013-8000",
+                     fontsize=11,fontname="CN")
+    if duplicate_email:
+        page.insert_text((48,235),"复核 "+email,
+                         fontsize=11,fontname="CN")
+    if shared:
+        page.insert_text((48,272),"其他用途 "+email,
+                         fontsize=11,fontname="CN")
+    data=doc.tobytes()
+    doc.close()
+    return data
+
+
+def test_independent_contacts_mark_only_exact_tokens_as_verified_O():
+    pdf=_contact_fixture()
+    gt={**_truth(),"basicInfo":{
+        "personalEmail":"lab@example.invalid",
+        "phoneNumber":"+86 138-0013-8000",
+    }}
+    made=build_partial_bio(pdf,gt,source_id=21,
+                           allowed_train_ids=(21,),forbidden_ids=(41,))
+    assert made["positive_span_count"]==2
+    assert made["verified_background_span_count"]==2
+    assert made["background_by_type"]=={"personalEmail":1,"phoneNumber":1}
+    assert made["observed_O_count"]==len("lab@example.invalid")+len("+86 138-0013-8000")
+    assert made["negative_background_labels_created"]==0
+    assert made["complete_background_annotation"] is False
+    assert made["standard_supervised_BIO_ready"] is False
+    assert made["background_provenance"]=="independent_GT_contact_only"
+    for line in made["lines"]:
+        for record in line["verified_background_spans"]:
+            assert record["label_source"]=="independent_gt_contact"
+            assert record["field"] in {"personalEmail","phoneNumber"}
+            start,end=record["start_char"],record["end_char"]
+            assert all(line["tags"][i]=="O" and line["observed_mask"][i]
+                       for i in range(start,end))
+            # Even contact-adjacent dates and whitespace are UNKNOWN.
+            if "2023.01 接触记录" in line["source_line"]:
+                assert all(line["tags"][i] is None for i in range(0,8))
+    stats=summarize_partial_bio([made])
+    assert stats["observed_O_count"]==made["observed_O_count"]
+    assert stats["verified_background_span_count"]==2
+    assert stats["unknown_characters"]>0
+    assert stats["background_provenance"]=="independent_GT_contact_only"
+
+
+def test_duplicate_contact_or_bad_format_cannot_generate_O():
+    data=_contact_fixture(duplicate_email=True)
+    gt={**_truth(),"basicInfo":{
+        "personalEmail":"lab@example.invalid",
+        "phoneNumber":"not a phone",
+    }}
+    r=build_partial_bio(data,gt,source_id=21,
+                        allowed_train_ids=(21,),forbidden_ids=(41,))
+    assert r["verified_background_span_count"]==0
+    assert r["observed_O_count"]==0
+    assert r["abstained_ambiguous_contact_spans"]>=1
+    assert r["abstained_invalid_contact_fields"]>=1
+
+
+def test_contact_gt_overlaps_target_entity_must_not_erase_positive_span():
+    import pymupdf
+    doc=pymupdf.open()
+    page=doc.new_page()
+    page.insert_text((50,90),"Company: lab@example.invalid",fontsize=12)
+    data=doc.tobytes()
+    doc.close()
+    gt={"basicInfo":{"personalEmail":"lab@example.invalid"},
+        "workExperience":[{"companyName":"lab@example.invalid"}]}
+    made=build_partial_bio(data,gt,source_id=21,
+                           allowed_train_ids=(21,),forbidden_ids=(41,))
+    assert made["positive_span_count"]==1
+    assert made["observed_O_count"]==0
+    assert made["abstained_conflicting_contact_spans"]>=1
+    assert any(tag=="B-EMPLOYER" for line in made["lines"]
+               for tag in line["tags"])
+    assert not any(tag=="O" for line in made["lines"] for tag in line["tags"])
+
+
+def test_contact_gt_not_allowed_if_fields_not_explicitly_annotated():
+    data=_contact_fixture()
+    gt={**_truth()}
+    made=build_partial_bio(data,gt,source_id=21,
+                           allowed_train_ids=(21,),forbidden_ids=(41,))
+    assert made["observed_O_count"]==0
+    assert made["verified_background_span_count"]==0
+    assert made["unknown_characters"]>0
+
+
+
+def test_unknown_to_O_mutation_without_gt_contact_provenance_is_rejected():
+    import copy
+    baseline=build_partial_bio(
+        _single_line_doc(),_truth(),source_id=21,
+        allowed_train_ids=(21,),forbidden_ids=(1,)
+    )
+    changed=copy.deepcopy(baseline)
+    row=next(x for x in changed["lines"] if "2022.07" in x["source_line"])
+    index=row["source_line"].index("2022")
+    assert row["tags"][index] is None
+    row["tags"][index]="O"
+    row["observed_mask"][index]=True
+    changed["observed_O_count"]=1
+    changed["known_characters"]+=1
+    changed["unknown_characters"]-=1
+    with pytest.raises(ValueError,match="无来源"):
+        summarize_partial_bio([changed])
+
+
+def test_gt_contact_substring_inside_a_longer_token_is_not_verified_background():
+    import pymupdf
+    doc=pymupdf.open()
+    page=doc.new_page()
+    page.insert_text((55,75),"Acontact@example.invalidB",fontsize=10)
+    page.insert_text((55,109),"09138001380000",fontsize=10)
+    data=doc.tobytes()
+    doc.close()
+    gt={"basicInfo":{
+        "personalEmail":"contact@example.invalid",
+        "phoneNumber":"13800138000",
+    }}
+    output=build_partial_bio(
+        data,gt,source_id=21,
+        allowed_train_ids=(21,),forbidden_ids=(1,)
+    )
+    assert output["verified_background_span_count"]==0
+    assert output["observed_O_count"]==0
+    assert output["abstained_missing_contact_spans"]==2
+    assert output["negative_background_labels_created"]==0
+
+
+def test_verified_O_has_no_authority_to_label_rest_of_line():
+    data=_contact_fixture()
+    gt={**_truth(),"basicInfo":{"personalEmail":"lab@example.invalid"}}
+    output=build_partial_bio(
+        data,gt,source_id=21,
+        allowed_train_ids=(21,),forbidden_ids=(1,)
+    )
+    record=next(
+        line for line in output["lines"]
+        if "lab@example.invalid" in line["source_line"]
+    )
+    email_start=record["source_line"].index("lab@example.invalid")
+    assert email_start>0
+    assert all(record["tags"][i] is None for i in range(email_start))
+    assert all(record["observed_mask"][i] is False for i in range(email_start))
+    assert output["standard_supervised_BIO_ready"] is False
