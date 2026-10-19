@@ -54,7 +54,7 @@ def run() -> dict:
         "legacy_fixed_holdout_read":False,
         "actual_training_performed":False,
         "background_labels_verified":aggregate["observed_O_count"]>0,
-        "background_scope":"only unique, format-checked, non-overlapping independent-GT contacts",
+        "background_scope":"unique, exact, format-checked, non-overlapping independent GT contacts, identity, and employment months only",
         "complete_background_annotation":False,
         "deployment_allowed":False,
         "actual_pdf_to_schema_benchmark_unchanged":True,

@@ -79,6 +79,107 @@ def _literal_contact_occurrences(
     return matches
 
 
+
+
+_NON_TARGET_FIELDS = ("name", "employmentStartDate", "employmentEndDate")
+_ALL_BACKGROUND_FIELDS = _CONTACT_FIELDS + _NON_TARGET_FIELDS
+_NAME = re.compile(r"(?:[\u4e00-\u9fff]{2,4}|[A-Za-z]+(?:[ -][A-Za-z]+){1,3})\Z")
+_MONTH = re.compile(r"((?:19|20)\d{2})[./-](0?[1-9]|1[0-2])\Z")
+
+
+def _independent_non_target_values(annotation: dict) -> list[tuple[str,str,str]]:
+    """Enumerate ONLY explicitly supplied independent GT identity/months."""
+    fields=[]
+    basic=annotation.get("basicInfo") or {}
+    if isinstance(basic,dict) and isinstance(basic.get("name"),str) and basic["name"].strip():
+        fields.append(("name",basic["name"].strip(),"basicInfo.name"))
+    for index,work in enumerate(annotation.get("workExperience") or []):
+        if not isinstance(work,dict):
+            continue
+        period=work.get("employmentPeriod") or {}
+        if not isinstance(period,dict):
+            continue
+        for source_key,field in (("startDate","employmentStartDate"),
+                                 ("endDate","employmentEndDate")):
+            value=period.get(source_key)
+            if isinstance(value,str) and value.strip():
+                fields.append((
+                    field,value.strip(),
+                    f"workExperience.{index}.employmentPeriod.{source_key}"
+                ))
+    return fields
+
+
+def _valid_non_target(field: str, value: str) -> bool:
+    if field=="name":
+        return bool(_NAME.fullmatch(value)) and len(value)<=55
+    if field in ("employmentStartDate","employmentEndDate"):
+        return bool(_MONTH.fullmatch(value))
+    return False
+
+
+def _literal_verified_occurrences(
+    lines: list[dict], field: str, value: str,
+) -> list[tuple[int,int,int]]:
+    """Conservative exact token boundaries; no fuzzy GT/date normalization.
+
+    A year-only value or a YYYY.MM prefix inside YYYY.MM.DD cannot prove a
+    distinct date. A short person name inside a longer CJK word cannot
+    prove identity, even when it appears only once in the PDF.
+    """
+    if field in _CONTACT_FIELDS:
+        return _literal_contact_occurrences(lines,field,value)
+    if not _valid_non_target(field,value):
+        return []
+    matches=[]
+    for line_index,line in enumerate(lines):
+        source=line["source_line"]
+        for match in re.finditer(re.escape(value),source,re.I):
+            start,end=match.span()
+            before=source[start-1] if start else ""
+            after=source[end] if end<len(source) else ""
+            if field=="name":
+                if ((before and (before.isalnum() or before=="_"))
+                    or (after and (after.isalnum() or after=="_"))):
+                    continue
+            else:
+                # Reject substrings of longer dates or numeric references.
+                if before and (before.isalnum() or before in "./"):
+                    continue
+                if after and (after.isalnum() or (
+                    after in "./" and end+1<len(source)
+                    and source[end+1].isdigit()
+                )):
+                    continue
+            matches.append((line_index,start,end))
+    return matches
+
+
+def _background_source_valid(span: dict, literal: str) -> bool:
+    """Verify source type, path and token shape when auditing O labels."""
+    field=span.get("field")
+    ref=span.get("source_path")
+    origin=span.get("label_source")
+    if field in _CONTACT_FIELDS:
+        return (ref==f"basicInfo.{field}"
+                and origin=="independent_gt_contact"
+                and _valid_contact(field,literal))
+    if field=="name":
+        return (ref=="basicInfo.name"
+                and origin=="independent_gt_identity"
+                and _valid_non_target(field,literal))
+    if field in ("employmentStartDate","employmentEndDate"):
+        gt_key="startDate" if field=="employmentStartDate" else "endDate"
+        return (
+            isinstance(ref,str)
+            and bool(re.fullmatch(
+                rf"workExperience\.\d+\.employmentPeriod\.{gt_key}",ref
+            ))
+            and origin=="independent_gt_employment_date"
+            and _valid_non_target(field,literal)
+        )
+    return False
+
 def _protected_gt_ranges(lines: list[dict], annotation: dict) -> dict[int,list[tuple[int,int]]]:
     """Protect target GT text even when its source location is ambiguous."""
     ranges:dict[int,list[tuple[int,int]]]={}
@@ -94,22 +195,43 @@ def _protected_gt_ranges(lines: list[dict], annotation: dict) -> dict[int,list[t
 def _verified_background_candidates(
     lines: list[dict], annotation: dict,
 ) -> tuple[list[dict],dict[str,int]]:
-    counters={"ambiguous":0,"missing":0,"invalid":0,"conflicting":0}
+    counters={
+        "ambiguous":0,"missing":0,"invalid":0,"conflicting":0,
+        "ambiguous_non_target":0,"missing_non_target":0,
+        "invalid_non_target":0,"conflicting_non_target":0,
+    }
     selected=[]
-    for field,value in _independent_contacts(annotation):
-        if not _valid_contact(field,value):
-            counters["invalid"]+=1
+    specifications=[
+        (field,value,f"basicInfo.{field}","independent_gt_contact")
+        for field,value in _independent_contacts(annotation)
+    ]
+    specifications.extend(
+        (field,value,source_path,
+         "independent_gt_identity" if field=="name" else
+         "independent_gt_employment_date")
+        for field,value,source_path in _independent_non_target_values(annotation)
+    )
+    for field,value,source_path,origin in specifications:
+        is_contact=field in _CONTACT_FIELDS
+        valid=(
+            _valid_contact(field,value) if is_contact
+            else _valid_non_target(field,value)
+        )
+        qualifier="" if is_contact else "_non_target"
+        if not valid:
+            counters["invalid"+qualifier]+=1
             continue
-        matches=_literal_contact_occurrences(lines,field,value)
+        matches=_literal_verified_occurrences(lines,field,value)
         if len(matches)!=1:
-            counters["ambiguous" if matches else "missing"]+=1
+            counters[("ambiguous" if matches else "missing")+qualifier]+=1
             continue
         i,start,end=matches[0]
         selected.append({
             "line_index":i,
             "start_char":start,"end_char":end,
             "field":field,
-            "label_source":"independent_gt_contact",
+            "label_source":origin,
+            "source_path":source_path,
         })
     protected=_protected_gt_ranges(lines,annotation)
     rejected=set()
@@ -126,7 +248,12 @@ def _verified_background_candidates(
                 min(s["end_char"],other["end_char"])
             ):
                 rejected.add(a);rejected.add(b)
-    counters["conflicting"]=len(rejected)
+    counters["conflicting"]=sum(
+        selected[i]["field"] in _CONTACT_FIELDS for i in rejected
+    )
+    counters["conflicting_non_target"]=sum(
+        selected[i]["field"] in _NON_TARGET_FIELDS for i in rejected
+    )
     return [
         record for i,record in enumerate(selected) if i not in rejected
     ],counters
@@ -235,12 +362,18 @@ def build_partial_bio(
         "unknown_characters":n_chars-known,
         "observed_O_count":background_chars,
         "verified_background_span_count":verified_background_spans,
-        "background_by_type":{field:background_by_type[field] for field in _CONTACT_FIELDS},
+        "background_by_type":{field:background_by_type[field] for field in _ALL_BACKGROUND_FIELDS if background_by_type[field]},
         "abstained_ambiguous_contact_spans":background_abstentions["ambiguous"],
         "abstained_missing_contact_spans":background_abstentions["missing"],
         "abstained_invalid_contact_fields":background_abstentions["invalid"],
         "abstained_conflicting_contact_spans":background_abstentions["conflicting"],
-        "background_provenance":"independent_GT_contact_only",
+        "abstained_ambiguous_non_target_spans":background_abstentions["ambiguous_non_target"],
+        "abstained_missing_non_target_spans":background_abstentions["missing_non_target"],
+        "abstained_invalid_non_target_fields":background_abstentions["invalid_non_target"],
+        "abstained_conflicting_non_target_spans":background_abstentions["conflicting_non_target"],
+        "background_provenance":("independent_GT_verified_non_target_only"
+            if any(background_by_type[field] for field in _NON_TARGET_FIELDS)
+            else "independent_GT_contact_only"),
         "negative_background_labels_created":0,
         "positive_span_count":sum(applied.values()),
         "positive_by_field":{field:applied[field] for field in FIELD_TAGS},
@@ -281,9 +414,10 @@ def summarize_partial_bio(dataset: list[dict]) -> dict:
             for span in row["verified_background_spans"]:
                 start,end=span["start_char"],span["end_char"]
                 field=span["field"]
-                if (span["label_source"]!="independent_gt_contact" or
-                    not 0<=start<end<=len(row["tags"]) or
-                    not _valid_contact(field,row["source_line"][start:end])):
+                if (not 0<=start<end<=len(row["tags"]) or
+                    not _background_source_valid(
+                        span,row["source_line"][start:end]
+                    )):
                     raise ValueError("背景标签缺少独立联系方式字段证明")
                 if any(i in observed for i in range(start,end)):
                     raise ValueError("背景标签区间存在重复计数")
@@ -312,16 +446,24 @@ def summarize_partial_bio(dataset: list[dict]) -> dict:
         "positive_spans_by_field":{field:by_field[field] for field in FIELD_TAGS},
         "observed_O_count":o_total,
         "verified_background_span_count":sum(item["verified_background_span_count"] for item in dataset),
-        "background_by_type":{field:background[field] for field in _CONTACT_FIELDS},
+        "background_by_type":{field:background[field] for field in _ALL_BACKGROUND_FIELDS if background[field]},
         "abstained_ambiguous_contact_spans":sum(item["abstained_ambiguous_contact_spans"] for item in dataset),
         "abstained_missing_contact_spans":sum(item["abstained_missing_contact_spans"] for item in dataset),
         "abstained_invalid_contact_fields":sum(item["abstained_invalid_contact_fields"] for item in dataset),
         "abstained_conflicting_contact_spans":sum(item["abstained_conflicting_contact_spans"] for item in dataset),
-        "background_provenance":"independent_GT_contact_only",
+        "abstained_ambiguous_non_target_spans":sum(item["abstained_ambiguous_non_target_spans"] for item in dataset),
+        "abstained_missing_non_target_spans":sum(item["abstained_missing_non_target_spans"] for item in dataset),
+        "abstained_invalid_non_target_fields":sum(item["abstained_invalid_non_target_fields"] for item in dataset),
+        "abstained_conflicting_non_target_spans":sum(item["abstained_conflicting_non_target_spans"] for item in dataset),
+        "background_provenance":("independent_GT_verified_non_target_only"
+            if any(background[field] for field in _NON_TARGET_FIELDS)
+            else "independent_GT_contact_only"),
         "negative_background_labels_created":0,
         "standard_supervised_BIO_ready":False,
         "fully_labeled_lines":sum(item["fully_labeled_lines"] for item in dataset),
-        "background_identifiability":"contact_only_partial" if o_total else "not_established",
+        "background_identifiability":("verified_non_target_partial"
+            if any(background[field] for field in _NON_TARGET_FIELDS)
+            else "contact_only_partial" if o_total else "not_established"),
         "trained_model":False,
         "production_integrated":False,
         "note":"Unknown positions are masked; no complete O labels or job-semantic validation supplied.",
