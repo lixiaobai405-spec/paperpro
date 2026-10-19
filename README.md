@@ -37,6 +37,8 @@ PaperPro 现有两条独立但共用解析与设置基础设施的流程：**求
 
 **GT-blind PDF 字段候选试验（未部署）：** 在不向候选器输入任何 GT 的条件下，对独立开源样本定位可能包含公司/职位的原生文字行。开发池职位 GT 覆盖 34/45、公司 36/46；相同冻结配置在独立挑战集下降为职位 **27/50**、公司 **29/49**，因此该简单词面方法**未通过可泛化验收，不接入生产**，保留现有人工校对。详见 `docs/NATIVE_FIELD_CANDIDATES_20261019.md`。
 
+**下一代 PDF 抽取研究（实验层、未部署）：** 使用独立 GT 唯一文字行训练过 CPU 行级分类器，扩大训练来源后仍未达到开发集旧词表覆盖与候选量门禁，因此**没有读取新冻结测试集，也没有推广模型**。进一步发现公司与职位常在同一文字行的不同字符区间，改用字符区间标注后，在 15 份训练 PDF 内恢复了原接口丢弃的 20 个正向监督锚点。该数字不是解析准确率；详细方法、失败记录与后续路径见 `docs/LINE_FIELD_SPAN_SUPERVISION_20261019.md`。
+
 规则权重和高/中/低阈值仍属**初版假设**。已完成 48 个合成层级情景、±20% 权重扰动测试，以及 1,680 组独立反事实关系的压力测试（`uv run --python 3.12 python -m scripts.stress_test_scoring`），据此修复了重复证据刷分和技能词表遗漏。但尚缺独立 HR 标注样本与真实筛选结果，**不能把分数写成录用概率或已验证的 HR 官方打分**。详情见 `docs/SCORING_METHODOLOGY.md` 和 `docs/R7_R10_CANDIDATE_DIAGNOSIS.md`。已提供完全离线的专家评分评价脚本：`uv run --python 3.12 python -m scripts.evaluate_hr_dataset --input evaluation_private/hr_labels.json`；私密数据集不会被 Git 跟踪。
 
 ## 经典简历编辑（/classic）
