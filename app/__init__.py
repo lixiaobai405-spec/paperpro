@@ -1,0 +1,1 @@
+"""PaperPro application package."""

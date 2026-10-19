@@ -1,0 +1,30 @@
+[project]
+name = "paperpro"
+version = "0.1.0"
+description = "Local-first resume enhancement studio"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "uvicorn[standard]>=0.35,<1",
+  "python-multipart>=0.0.20,<1",
+  "python-docx>=1.2,<2",
+  "pymupdf>=1.25,<2",
+  "pillow>=11,<13",
+  "rapidocr-onnxruntime>=1.4,<2",
+  "numpy>=1.26,<3",
+  "pytesseract>=0.3.13,<1",
+  "pywin32>=310; sys_platform == 'win32'",
+  "httpx>=0.28,<1",
+  "reportlab>=4.2,<5",
+]
+[dependency-groups]
+dev = [
+  "pytest>=8,<10",
+  "pytest-cov>=6,<8",
+]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+[tool.uv]
+package = false

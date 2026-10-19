@@ -1,0 +1,15 @@
+{
+  "_comment": "公开配置模板，可上传 GitHub；标准 JSON 不支持 // 注释，因此使用 _comment 字段。公开仓库中的 api_key 必须保持空字符串。需要长期保存自己的 Key，请在同目录创建 settings.local.json（已被 Git 忽略）；服务按请求重新读取配置。",
+  "deepseek": {
+    "api_key": "",
+    "_api_key_comment": "留空待填：DeepSeek 专用 API Key。推荐填写在 settings.local.json 的 deepseek.api_key，或通过网页右上角 AI 设置临时输入。勿提交真实 Key。DeepSeek 的地址与模型已固定为官方 HTTPS 地址和 deepseek-flash。"
+  },
+  "configured": {
+    "api_key": "",
+    "_api_key_comment": "留空待填：其他 OpenAI 兼容服务的专用 API Key。推荐填写在 settings.local.json 的 configured.api_key；不会与 DeepSeek 的密钥混用。",
+    "base_url": "https://api.openai.com/v1",
+    "_base_url_comment": "自定义服务的 API 地址；通常填写其 HTTPS /v1 接口，只允许 localhost 使用明文 HTTP。私有覆盖配置可修改本字段。",
+    "model": "gpt-4.1-mini",
+    "_model_comment": "自定义服务提供的模型标识。仅作默认示例，若服务商不同，请在 settings.local.json 中覆盖。"
+  }
+}
