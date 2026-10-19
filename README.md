@@ -33,6 +33,8 @@ PaperPro 现有两条独立但共用解析与设置基础设施的流程：**求
 
 **工作职位的几何辅助校对（人工确认）：** 当 PDF 已有起止年月和工作经历，却无法拆出职位时，系统可依据同行的日期、机构和文字块提供**未经核实的候选关系**，在第二步显示原文、候选机构/职位、PDF 页码和三个文字块的定位坐标，并提供「已核对采纳 / 忽略」按钮。候选采用固定 schema，`confidence.tier=low`、`confidence.calibrated=false`，明确表示**尚无统计校准，不是任职概率**。**不点击采纳则不写入简历，也不影响评分或任职年限**。外部固定挑战集实测仅产生 1 条候选且与独立配对标注不一致，故严格禁止自动采纳；基础解析命中仍为 167/276（60.51%），不是新增识别增益。工程反例见 `tests/test_work_relation_geometry.py`、审计见 `scripts/profile_work_relation_gates.py`。
 
+**PDF 关系监督实验（不影响正式功能）：** 使用独立开源合成 PDF 标注验证了“原文文字行定位 → 公司/职位关系数据 → CPU 小模型”接口。开发候选池为编号 21–40，固定挑战集为 1–10、101–105、201–205。纯几何基线与小型线性排序器在有独立 GT 唯一锚点的前提下得到相同结果（固定挑战集 29/29 个非平凡 Top-1），**训练未带来收益、模型未部署**，也完全不代表端到端简历识别准确率；完整实验及限制见 `docs/RELATION_SUPERVISION_20261019.md`。下一步应使系统不依赖 GT 自动寻找职位/公司候选，而不是继续训练容易的坐标排序任务。
+
 规则权重和高/中/低阈值仍属**初版假设**。已完成 48 个合成层级情景、±20% 权重扰动测试，以及 1,680 组独立反事实关系的压力测试（`uv run --python 3.12 python -m scripts.stress_test_scoring`），据此修复了重复证据刷分和技能词表遗漏。但尚缺独立 HR 标注样本与真实筛选结果，**不能把分数写成录用概率或已验证的 HR 官方打分**。详情见 `docs/SCORING_METHODOLOGY.md` 和 `docs/R7_R10_CANDIDATE_DIAGNOSIS.md`。已提供完全离线的专家评分评价脚本：`uv run --python 3.12 python -m scripts.evaluate_hr_dataset --input evaluation_private/hr_labels.json`；私密数据集不会被 Git 跟踪。
 
 ## 经典简历编辑（/classic）
