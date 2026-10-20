@@ -11,6 +11,7 @@ import json
 import re
 
 from .schema import CandidateResume, Target
+from .claim_conflicts import detect_description_conflicts
 from .scoring import (
     _contains, _find, _refs, _profile, calculate_timeline, load_rules,
     score_match, weight_sensitivity, evaluate_ordinal_benchmarks, rules_prompt,
@@ -167,6 +168,7 @@ def _verification(resume: CandidateResume, target: Target, as_of: str) -> dict:
                 "reason":reason,
                 "severity":"中",
             })
+    issues.extend(detect_description_conflicts(resume))
     for ref in _refs(resume):
         text=ref["original"]
         # Warn only about numeric achievements with context, not years, phone or education dates.
@@ -186,7 +188,10 @@ def _verification(resume: CandidateResume, target: Target, as_of: str) -> dict:
             questions.append({
                 "id":"question-"+issue["id"],"issue_id":issue["id"],
                 "check":issue["type"],
-                "question":("请结合这段经历说明具体起止时间、你的实际职责，以及可核实的证据是什么？"
+                "question":(f"简历中关于 {issue['subject']} 的两处说法不一致：请核实是否为同一时期、"
+                            "同一主体与同一事实，并说明哪一处需要修改？"
+                            if issue.get("conflict_kind")=="explicit_skill_polarity" else
+                            "请结合这段经历说明具体起止时间、你的实际职责，以及可核实的证据是什么？"
                             if "时间" in issue["type"] or "任期" in issue["type"]
                             else "这项成果的计算方式、数据基线及你个人负责的部分分别是什么？"),
                 "purpose":"确认简历描述的上下文与可追溯事实，不预设不诚信。",
@@ -310,7 +315,25 @@ def _advice(resume: CandidateResume, target: Target, dimensions: dict) -> list[d
             "problem":problem,"action":action,"example":example,
             "target":(target.role or target.company),
         })
-    # High-priority suggestions must be evidence-linked shortlist, not style preferences.
+    # Only concrete two-source contradictions receive a targeted correction
+    # item. No missing skill or unverified inference is called a contradiction.
+    for issue in verification_issues:
+        if issue.get("conflict_kind")!="explicit_skill_polarity":
+            continue
+        advice.append({
+            "id":"advice-"+issue["id"],"issue_id":issue["id"],
+            "conflict_kind":issue["conflict_kind"],
+            "title":f"核对两处矛盾描述：{issue['subject']}",
+            "assessment":"需要修正","priority":"高",
+            "location":issue["location"],"original":issue["original"],
+            "related_location":issue["related_location"],
+            "related_original":issue["related_original"],
+            "problem":issue["reason"],
+            "action":"逐条核对两处原文与真实能力、时期及本人负责内容；修正不准确的一处，不能照搬岗位JD补写经历。",
+            "example":"[核实后，保留能够提供依据的一致描述]",
+            "target":(target.role or target.company),
+        })
+    # High-priority suggestions must be linked to a real gap or two sources.
     return sorted(advice,key=lambda x:({"高":0,"中":1,"低":2}[x["priority"]],x["id"]))
 
 

@@ -8,7 +8,7 @@ export default defineConfig({
   retries: 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:8766',
+    baseURL: process.env.PAPERPRO_E2E_BASE_URL || 'http://127.0.0.1:8766',
     headless: true,
     trace: 'retain-on-failure',
     screenshot: 'on',

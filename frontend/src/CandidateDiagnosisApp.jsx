@@ -170,8 +170,13 @@ function Verification({ data }) {
     <Text size="sm" mb="md">{data.conclusion}</Text>
     {(data.issues || []).length ? data.issues.map((it, i) => <div className="diag-issue" key={it.id || i}>
       <Group mb="xs"><Status text={it.severity + ' · 需核对'} color={it.severity === '高' ? 'orange' : 'gray'}/><strong>{it.type}</strong></Group>
-      <Text size="xs" c="dimmed">{it.location}</Text>
+      <Text size="xs" c="dimmed">证据位置：{it.location}</Text>
       <Text size="sm">{it.original}</Text>
+      {it.related_location&&<Paper p="sm" withBorder radius="sm" mt="xs"
+        data-testid="verification-opposing-claim">
+        <Text size="xs" c="dimmed">另一处描述：{it.related_location}</Text>
+        <Text size="sm">{it.related_original}</Text>
+      </Paper>}
       <Text size="sm" mt={6}>{it.reason}</Text>
     </div>) : <Alert color="teal" variant="light">暂未发现规则能识别的存疑点；这不代表简历信息已经被外部核实。</Alert>}
     <Text size="xs" c="dimmed" mt="sm">{data.caveat}</Text>
@@ -630,6 +635,9 @@ export default function CandidateDiagnosisApp() {
               <div className="diag-advice-body">
                 <Text size="xs" c="dimmed">定位：{s.location}</Text>
                 <Text size="sm">原文：{s.original}</Text>
+                {s.related_location&&<Text size="sm" data-testid="advice-opposing-claim">
+                  对照：{s.related_location} · {s.related_original}
+                </Text>}
                 <Text size="sm"><strong>{s.assessment==='可选深化'?'优化机会：':'问题：'}</strong>{s.problem}</Text>
                 <Text size="sm"><strong>建议：</strong>{s.action}</Text>
                 <div className="diag-example"><strong>局部示例（不是事实陈述）</strong><div>{s.example}</div></div>
