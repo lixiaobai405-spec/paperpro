@@ -172,7 +172,7 @@ def detect_description_conflicts(
         )
         issues.append({
             "id": f"claim-conflict-{issue_id}",
-            "type": "简历描述相互矛盾",
+            "type": "描述可能不一致（可选核对）",
             "conflict_kind": "explicit_skill_polarity",
             "subject": term,
             "location": positive["path"],
@@ -182,8 +182,8 @@ def detect_description_conflicts(
             "evidence_refs": [positive, negative],
             "reason": (
                 f"关于 {term} 的陈述需要核对：{mismatch}。"
-                "请确认双方是否指向同一时期、同一主体和同一事实；"
-                "自动检查不能决定哪一句真实，也不会修改简历。"
+                "两句话可能涉及不同时间或语境；如影响表达清晰度可自行核对。"
+                "自动检查不裁定真假、不调整评分，也不会阻止导出。"
             ),
             "severity": "中",
         })

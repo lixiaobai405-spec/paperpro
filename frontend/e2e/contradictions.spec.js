@@ -13,7 +13,7 @@ test('two opposing current resume statements are visible, reviewable and exporte
 
   const conflicting = page.getByTestId('dimension-verification')
     .locator('.diag-issue')
-    .filter({ hasText: '简历描述相互矛盾' });
+    .filter({ hasText: '描述可能不一致' });
   await expect(conflicting).toHaveCount(1);
   await expect(conflicting).toContainText('我熟悉 Python');
   await expect(conflicting.getByTestId('verification-opposing-claim')).toContainText('skills.0');
@@ -22,7 +22,8 @@ test('two opposing current resume statements are visible, reviewable and exporte
   await page.getByTestId('candidate-next-todo').click();
   const advice = page.locator('[data-testid^="advice-advice-claim-conflict-"]');
   await expect(advice).toHaveCount(1);
-  await expect(advice).toContainText('核对两处矛盾描述');
+  await expect(advice).toContainText('可能不一致');
+  await expect(advice).toContainText('可选深化');
   await expect(advice.getByTestId('advice-opposing-claim')).toContainText('Python：不会');
   await advice.locator('input[type="checkbox"]').check();
 
@@ -42,5 +43,5 @@ test('two opposing current resume statements are visible, reviewable and exporte
   await page.getByTestId('candidate-generate').click();
   await expect(page.getByTestId('dimension-verification')
     .locator('.diag-issue')
-    .filter({ hasText: '简历描述相互矛盾' })).toHaveCount(0);
+    .filter({ hasText: '描述可能不一致' })).toHaveCount(0);
 });

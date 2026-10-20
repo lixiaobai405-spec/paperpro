@@ -323,13 +323,13 @@ def _advice(resume: CandidateResume, target: Target, dimensions: dict) -> list[d
         advice.append({
             "id":"advice-"+issue["id"],"issue_id":issue["id"],
             "conflict_kind":issue["conflict_kind"],
-            "title":f"核对两处矛盾描述：{issue['subject']}",
-            "assessment":"需要修正","priority":"高",
+            "title":f"可选核对：{issue['subject']} 的表述可能不一致",
+            "assessment":"可选深化","priority":"中",
             "location":issue["location"],"original":issue["original"],
             "related_location":issue["related_location"],
             "related_original":issue["related_original"],
             "problem":issue["reason"],
-            "action":"逐条核对两处原文与真实能力、时期及本人负责内容；修正不准确的一处，不能照搬岗位JD补写经历。",
+            "action":"如有需要，可核对两处原文的时间、主体与具体含义；存在实际差异时再统一措辞，不要求额外证明材料。",
             "example":"[核实后，保留能够提供依据的一致描述]",
             "target":(target.role or target.company),
         })
