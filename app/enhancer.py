@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .models import Resume
+from .diagnosis.scoring import load_rules
 
 
 FACT = re.compile(r"(?<!\d)[-+]?\d+(?:[.,]\d+)?\s*(?:%|％|万|亿|年|个月|月|小时|人|ms|倍)?")
@@ -63,6 +64,29 @@ def _assert_same_numbers(original: str, proposed: str, field: str) -> None:
         raise ValueError(f"AI 调换、修改或新增了 {field} 中的数字事实")
 
 
+def _recognized_technical_terms(text: str) -> set[str]:
+    """Find only explicit technologies in the shared, versioned skill terms.
+
+    This is a high-precision factual backstop, NOT semantic fact validation.
+    Chinese/general terms and the English verb 'go' are excluded to reduce
+    false rejections. Unknown technologies still require human review.
+    """
+    terms = load_rules()["factors"][0]["keywords"]
+    return {
+        term.lower() for term in terms
+        if term.isascii() and len(term) >= 3 and re.search(r"[A-Za-z]", term)
+        and re.search(r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])", text, re.I)
+    }
+
+
+def _assert_no_new_technical_terms(original: str, proposed: str, field: str) -> None:
+    newly_claimed = _recognized_technical_terms(proposed) - _recognized_technical_terms(original)
+    if newly_claimed:
+        raise ValueError(
+            f"AI 在 {field} 新增了该段原文没有的技术名称；请先补充真实证据，再人工修改。"
+        )
+
+
 def validate_ai_rewrite(source: Resume, proposal: dict[str, Any]) -> Resume:
     if not isinstance(proposal, dict) or set(proposal) != ALLOWED_AI_FIELDS:
         raise ValueError("AI 返回结构异常或尝试修改受保护字段")
@@ -75,6 +99,7 @@ def validate_ai_rewrite(source: Resume, proposal: dict[str, Any]) -> Resume:
         raise ValueError("AI 删除或新增了履历条目")
     result = copy.deepcopy(source)
     _assert_same_numbers(source.summary, summary, "个人简介")
+    _assert_no_new_technical_terms(source.summary, summary, "个人简介")
     if source.summary and not summary.strip():
         raise ValueError("AI 删除了原有的个人简介")
     result.summary = _clean_sentence(summary)
@@ -90,6 +115,7 @@ def validate_ai_rewrite(source: Resume, proposal: dict[str, Any]) -> Resume:
                     raise ValueError("AI 返回空白履历描述")
                 old = original_bullets[j]
                 _assert_same_numbers(old, value, f"{collection_name}.{i}.{j}")
+                _assert_no_new_technical_terms(old, value, f"{collection_name}.{i}.{j}")
                 new_items[i].bullets[j] = _clean_sentence(value)
     return result
 

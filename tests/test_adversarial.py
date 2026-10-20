@@ -67,6 +67,38 @@ def test_ai_cannot_reorder_or_duplicate_numeric_claims():
         validate_ai_rewrite(source, rewrite)
 
 
+def test_ai_cannot_copy_unproven_technical_skill_into_same_length_bullet():
+    source = Resume(
+        name="虚构候选人",
+        summary="熟悉 Python 开发",
+        experience=[Entry(heading="已确认单位｜后端开发", bullets=["使用 Python 开发 API"])]
+    )
+    proposal = {
+        "summary": source.summary,
+        "experience_bullets": [["使用 Python 与 Kubernetes 开发 API"]],
+        "project_bullets": []
+    }
+    # The rewritten bullet has the same number of items and no numbers, but
+    # adds a technology absent from this work item's reviewed evidence.
+    with pytest.raises(ValueError, match="新增.*技术"):
+        validate_ai_rewrite(source, proposal)
+
+
+def test_ai_can_rephrase_existing_technical_skill_without_new_claim():
+    source = Resume(
+        name="虚构候选人",
+        summary="熟悉 Python 开发",
+        experience=[Entry(heading="已确认单位｜后端开发", bullets=["使用 Python 开发 API"])]
+    )
+    proposal = {
+        "summary": "具有 Python 开发经验",
+        "experience_bullets": [["使用 Python 实现 API 接口"]],
+        "project_bullets": []
+    }
+    output = validate_ai_rewrite(source, proposal)
+    assert output.experience[0].bullets[0] == "使用 Python 实现 API 接口"
+
+
 def test_docx_page_size_is_a4():
     output = make_docx(Resume(name="Name", summary="Work"))
     document = Document(BytesIO(output))

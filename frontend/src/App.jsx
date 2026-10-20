@@ -11,6 +11,7 @@ import {
   IconInfoCircle, IconLock, IconPlus, IconRefresh, IconSettings, IconShieldCheck,
   IconSparkles, IconTrash, IconWand, IconX,
 } from '@tabler/icons-react';
+import { consumeClassicHandoff } from './resumeHandoff.js';
 
 const EMPTY = {
   name: '', title: '', phone: '', email: '', location: '', links: [],
@@ -98,7 +99,7 @@ function SectionLabel({ children, hint }) {
   );
 }
 
-function EntryEditor({ title, entries, onChange, onAdd, onRemove, kind = 'entry' }) {
+function EntryEditor({ title, entries, onChange, onAdd, onRemove, kind = 'entry', headingComparisons = [] }) {
   const detailKey = kind === 'education' ? 'details' : 'bullets';
   return (
     <section className="editor-subsection" data-testid={title}>
@@ -126,6 +127,24 @@ function EntryEditor({ title, entries, onChange, onAdd, onRemove, kind = 'entry'
                 onChange={(event) => onChange(index, 'heading', event.currentTarget.value)}
                 placeholder={kind === 'education' ? '2020–2024 XX大学 | XX专业' : '2023–2025 XX公司 | 软件工程师'}
               />
+              {headingComparisons.filter((comparison) => comparison.index === index).map((comparison) =>
+                <div data-testid={'handoff-heading-comparison-' + index} key={index}>
+                  <Text size="xs" c="orange" mb="xs">
+                    校对阶段保留的标题与当前标题不同。请核对是否遗漏部门、工作性质等信息；
+                    该标题可能已在校对阶段被修改，初始文件证据请查看「原始识别文本」。只有当前编辑标题会进入导出。
+                  </Text>
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+                    <Paper p="xs" withBorder radius="sm">
+                      <Text size="xs" c="dimmed" fw={700}>校对阶段标题（不自动导出）</Text>
+                      <Text size="sm">{comparison.original}</Text>
+                    </Paper>
+                    <Paper p="xs" withBorder radius="sm">
+                      <Text size="xs" c="dimmed" fw={700}>当前标题（将用于导出）</Text>
+                      <Text size="sm">{entry.heading}</Text>
+                    </Paper>
+                  </SimpleGrid>
+                </div>
+              )}
               <DelimitedField
                 size="sm" autosize minRows={2} maxRows={6}
                 label={kind === 'education' ? '补充内容（一行一项）' : '工作内容 / 成果（一行一项）'}
@@ -250,8 +269,45 @@ export default function App() {
   const [aiConsent, setAiConsent] = useState(false);
   const [pendingAi, setPendingAi] = useState(null);
   const [documentToken, setDocumentToken] = useState(0);
+  const [handoffAdvice, setHandoffAdvice] = useState([]);
+  const [handoffHeadingComparisons, setHandoffHeadingComparisons] = useState([]);
   const editVersion = useRef(0);
   const fileSelectionVersion = useRef(0);
+
+  useEffect(() => {
+    // The candidate flow explicitly hands off one draft, in this tab only.
+    // No previous approvals, pending AI output, or upload lifecycle survive.
+    let transfer = null;
+    try { transfer = consumeClassicHandoff(window.sessionStorage); } catch { /* storage disabled */ }
+    if (!transfer) return;
+    editVersion.current += 1;
+    fileSelectionVersion.current += 1;
+    setDocumentToken((version) => version + 1);
+    setResume({ ...EMPTY, ...transfer.resume });
+    setTargetRole(transfer.targetRole || '');
+    setJobDescription(transfer.jobDescription || '');
+    setSource(transfer.sourceText || '');
+    setFileMeta({
+      filename: transfer.filename || '已校对的诊断简历',
+      method: '诊断流程交接',
+      warnings: [
+        '工作经历标题已按校对后的年月、公司与职位整理，导出前请对照原文再次核实。',
+        ...(transfer.targetCompany ? ['目标公司：' + transfer.targetCompany] : []),
+      ],
+    });
+    setHandoffAdvice(transfer.advice);
+    setHandoffHeadingComparisons(
+      (Array.isArray(transfer.headingComparisons) ? transfer.headingComparisons : [])
+        .filter((item) => Number.isInteger(item?.index)
+          && item.index >= 0 && item.index < transfer.resume.experience.length
+          && typeof item.original === 'string' && typeof item.projected === 'string')
+    );
+    setChanges([]);
+    setPendingAi(null);
+    setReviewed(false);
+    setAiConsent(false);
+    setMode('local');
+  }, []);
 
   useEffect(() => {
     fetch('/api/config').then((r) => r.ok ? r.json() : null).then(setConfig).catch(() => {});
@@ -282,6 +338,13 @@ export default function App() {
   }
   function removeEntry(key, index) {
     mutate((previous) => ({ ...previous, [key]: previous[key].filter((_, i) => i !== index) }), key);
+    if (key === 'experience') {
+      // The editor has no reordering control: a deletion shifts later indices.
+      // Keep source comparisons bound to their remaining work entry.
+      setHandoffHeadingComparisons((previous) => previous
+        .filter((item) => item.index !== index)
+        .map((item) => item.index > index ? { ...item, index: item.index - 1 } : item));
+    }
   }
 
   async function uploadFile(file) {
@@ -305,6 +368,8 @@ export default function App() {
       if (uploadVersion !== fileSelectionVersion.current) return;
       setDocumentToken((version) => version + 1);
       setResume({ ...EMPTY, ...result.resume });
+      setHandoffAdvice([]);
+      setHandoffHeadingComparisons([]);
       setFileMeta({ filename: result.filename, method: result.method, warnings: result.warnings || [] });
       setSource(result.source_text || '');
       setChanges([]);
@@ -344,6 +409,8 @@ export default function App() {
     setError('');
     setDocumentToken((version) => version + 1);
     setResume(structuredClone(DEMO));
+    setHandoffAdvice([]);
+    setHandoffHeadingComparisons([]);
     setFileMeta({ filename: '演示简历（虚构数据）', method: 'demo', warnings: ['演示简历只用于功能体验，不含真实个人信息。'] });
     setSource('陈晓明\n后端开发工程师\n工作经历\n2022.07 - 2025.06 星辰科技\n项目经历\n订单分析平台');
     setReviewed(false);
@@ -520,6 +587,21 @@ export default function App() {
               </div>}
             </Paper>
 
+            {handoffAdvice.length > 0 && <Paper className="workspace-card" radius="xl" p="lg"
+              data-testid="handoff-advice">
+              <Title order={3} className="panel-title">诊断中已选的优化建议</Title>
+              <Text size="xs" c="dimmed" mt="xs" mb="sm">
+                仅作为修改清单，不会自动添加事实、修改简历或代替最终审核。
+              </Text>
+              <Stack gap="xs">
+                {handoffAdvice.map(item => <Paper p="sm" withBorder radius="md" key={item.id}>
+                  <Text size="xs" c="dimmed">{item.id} · {item.location}</Text>
+                  <Text size="sm" fw={650}>{item.title}</Text>
+                  <Text size="sm">{item.action}</Text>
+                </Paper>)}
+              </Stack>
+            </Paper>}
+
             {resume && <Paper key={documentToken} className="workspace-card" radius="xl" p="lg" data-testid="editor-panel">
               <Group justify="space-between" align="flex-start" mb="md">
                 <div>
@@ -552,6 +634,7 @@ export default function App() {
                 <Accordion.Item value="experience">
                   <Accordion.Control><Text fw={650} size="sm">工作 / 实习经历</Text></Accordion.Control>
                   <Accordion.Panel><EntryEditor title="工作经历" entries={resume.experience} onChange={(i,f,v) => updateEntry('experience',i,f,v)}
+                    headingComparisons={handoffHeadingComparisons}
                     onAdd={() => addEntry('experience')} onRemove={(i) => removeEntry('experience',i)}/></Accordion.Panel>
                 </Accordion.Item>
                 <Accordion.Item value="projects">
@@ -590,6 +673,10 @@ export default function App() {
               </Text>
               <TextInput mt="md" label="目标岗位（可选）" placeholder="例如：后端开发 / 产品经理"
                 value={targetRole} onChange={(e) => changeEnhanceInput(setTargetRole, e.currentTarget.value)}/>
+              <Textarea mt="sm" autosize minRows={2} maxRows={5} label="岗位描述（可选）"
+                description="在本地模式中仅供查看与编辑；只有切换 AI 并主动授权后才可能发送给所选服务商。"
+                placeholder="粘贴 JD 帮助理解岗位；不会自动补写未核实的经历。"
+                value={jobDescription} onChange={(e) => changeEnhanceInput(setJobDescription, e.currentTarget.value)}/>
               {mode === 'ai' && <>
                 <Text size="sm" fw={700} mt="md" mb={6}>AI 服务商</Text>
                 <SegmentedControl fullWidth color="indigo" value={provider} onChange={changeProvider}
@@ -600,9 +687,6 @@ export default function App() {
                     ? '调用 DeepSeek 官方 deepseek-flash 模型。需使用 DeepSeek API Key。'
                     : '使用本地环境变量配置的 OpenAI 兼容 API 与对应密钥。'}
                 </Text>
-                <Textarea mt="sm" autosize minRows={2} maxRows={5} label="岗位描述（可选）"
-                  placeholder="粘贴 JD 帮助 AI 提出措辞建议；结果仍需要逐条核实事实。"
-                  value={jobDescription} onChange={(e) => changeEnhanceInput(setJobDescription, e.currentTarget.value)}/>
                 {!aiConsent && <Alert mt="sm" color="orange" variant="light" icon={<IconLock size={16}/>}>使用前请先在 AI 设置中同意发送数据。<Button variant="transparent" size="compact-xs" onClick={() => setSettingsOpen(true)}>打开设置</Button></Alert>}
               </>}
               <Button mt="md" fullWidth leftSection={<IconSparkles size={18}/>} onClick={enhance}

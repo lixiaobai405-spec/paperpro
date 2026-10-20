@@ -11,6 +11,7 @@ import {
   IconInfoCircle, IconLock, IconPlus, IconRefresh, IconSettings,
   IconShieldCheck, IconSparkles, IconTargetArrow, IconTrash,
 } from '@tabler/icons-react';
+import { createClassicHandoff, saveClassicHandoff } from './resumeHandoff.js';
 
 const STEPS = ['上传简历', '校对信息', '目标职位', '诊断报告', '优化清单'];
 const SECTIONS = [
@@ -398,6 +399,16 @@ export default function CandidateDiagnosisApp() {
     }catch(e){setError(e.message);}
     finally{setBusy('');}
   }
+  function openClassicWithReviewedDraft(){
+    if(!resume || !report || busy)return;
+    try{
+      const handoff=createClassicHandoff(resume,target,report,selected,fileMeta);
+      // Only an explicit user click saves these local browser-tab facts.
+      // It does not approve suggestions or enable any external AI provider.
+      saveClassicHandoff(window.sessionStorage,handoff);
+      window.location.assign('/classic');
+    }catch(e){setError(e.message||'简历交接失败，请重新尝试。');}
+  }
   function goTo(newStep){
     if(newStep>step)return;
     if(newStep===3&&!report)return;
@@ -630,6 +641,14 @@ export default function CandidateDiagnosisApp() {
               <Button variant="light" disabled={!selected.length||!!busy} onClick={()=>exportSelected('todo','pdf')}
                 leftSection={<IconDownload size={16}/>} data-testid="candidate-download-pdf">导出勾选项 PDF</Button>
             </Group>
+            <Alert color="blue" variant="light" mt="lg" title="继续完成岗位简历">
+              把当前已核对的履历、目标岗位与已选建议交给经典编辑器。
+              建议不会自动改写简历；进入后需要再次核对内容，才能导出 Word/PDF。
+              数据仅在当前浏览器标签页中一次性交接，不发送给外部 AI。
+            </Alert>
+            <Button mt="md" variant="light" leftSection={<IconFileText size={17}/>}
+              onClick={openClassicWithReviewedDraft} disabled={!!busy}
+              data-testid="candidate-open-classic">继续编辑并导出岗位简历</Button>
           </Panel>
           <Panel title="面试核查清单" extra={<Status text={selectedQuestions.length+' / '+questionList.length+' 已勾选'} color="gray"/>}>
             {(questionList.length===0)&&<Text size="sm" c="dimmed">当前没有规则触发的高/中风险核查问题。</Text>}

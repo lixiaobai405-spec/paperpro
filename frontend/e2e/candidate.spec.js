@@ -262,6 +262,156 @@ test('actual Chrome scan upload runs real local OCR and opens editable review', 
   await expect(page.getByTestId('dimension-match')).toBeVisible();
 });
 
+test('selected diagnosis advice hands off reviewed facts to classic exactly once, without auto-approval', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '填入虚构演示资料' }).click();
+  await page.getByTestId('candidate-parse-text').click();
+  await page.getByTestId('candidate-name').fill('陈测试');
+  await page.getByTestId('experience-company-0').fill('已核对星海科技');
+  await page.getByTestId('experience-role-0').fill('高级后端工程师');
+  await page.getByLabel('原始经历标题（用于溯源）').fill('2022.07–2025.06 星辰科技｜平台组（借调）｜后端工程师');
+  await page.getByTestId('experience-start-0').fill('2021.04');
+  await page.getByTestId('candidate-next-target').click();
+  await page.getByTestId('candidate-target-role').fill('Python 后端工程师');
+  await page.getByLabel('目标岗位 JD（可选，但推荐）').fill('负责 Python API、SQL 数据库与 Docker 部署。');
+  await page.getByTestId('candidate-generate').click();
+  await page.getByTestId('candidate-next-todo').click();
+  await page.getByTestId('advice-advice-01').locator('input[type=checkbox]').check();
+  let unexpectedAiRequests = 0;
+  page.on('request', request => {
+    if (request.url().includes('/api/enhance')) unexpectedAiRequests += 1;
+  });
+  await page.getByTestId('candidate-open-classic').click();
+  await expect(page).toHaveURL(/\/classic$/);
+  await expect(page.getByTestId('field-name')).toHaveValue('陈测试');
+  await expect(page.getByTestId('handoff-advice')).toContainText('岗位定位不明确');
+  await expect(page.getByTestId('handoff-advice')).toContainText('advice-01');
+  const comparison = page.getByTestId('handoff-heading-comparison-0');
+  await expect(comparison).toContainText('平台组（借调）');
+  await expect(comparison).toContainText('已核对星海科技');
+  await expect(comparison).toContainText('高级后端工程师');
+  await expect(page.getByLabel('目标岗位（可选）')).toHaveValue('Python 后端工程师');
+  await expect(page.getByLabel('岗位描述（可选）')).toHaveValue('负责 Python API、SQL 数据库与 Docker 部署。');
+  const preview = page.getByTestId('resume-preview');
+  await expect(preview).toContainText('已核对星海科技');
+  await expect(preview).toContainText('高级后端工程师');
+  await expect(preview).toContainText('2021.04');
+  await expect(preview).not.toContainText('平台组（借调）');
+  const previewText = await preview.innerText();
+  expect((previewText.match(/CET-6/g) || []).length).toBe(1);
+  expect((previewText.match(/拥有3年后端系统开发经验/g) || []).length).toBe(1);
+  await expect(page.getByTestId('review-checkbox')).not.toBeChecked();
+  await expect(page.getByTestId('download-docx')).toBeDisabled();
+  expect(unexpectedAiRequests).toBe(0);
+  await page.getByTestId('review-checkbox').check();
+  const workTitleField = page.getByTestId('editor-panel')
+    .getByLabel('机构、角色及起止时间').first();
+  await workTitleField.fill((await workTitleField.inputValue()) + ' · 平台组（借调）');
+  await expect(comparison).toContainText('平台组（借调）');
+  await expect(preview).toContainText('平台组（借调）');
+  await expect(page.getByTestId('review-checkbox')).not.toBeChecked();
+  await expect(page.getByTestId('download-docx')).toBeDisabled();
+  await page.getByTestId('review-checkbox').check();
+  await expect(page.getByTestId('download-docx')).toBeEnabled();
+  const exportRequest = page.waitForRequest(request =>
+    request.url().includes('/api/export?format=docx') && request.method() === 'POST'
+  );
+  const exportDownload = page.waitForEvent('download');
+  await page.getByTestId('download-docx').click();
+  const submitted = (await exportRequest).postDataJSON().resume;
+  expect(submitted.experience[0].heading).toContain('已核对星海科技');
+  expect(submitted.experience[0].heading).toContain('高级后端工程师');
+  expect(submitted.experience[0].heading).toContain('2021.04');
+  expect(submitted.experience[0].heading).toContain('平台组（借调）');
+  const downloaded = await exportDownload;
+  const docxBytes = await fs.readFile(await downloaded.path());
+  expect(docxBytes.subarray(0, 2).toString()).toBe('PK');
+  await page.reload();
+  await expect(page.getByTestId('handoff-advice')).toHaveCount(0);
+  await expect(page.getByTestId('field-name')).toHaveCount(0);
+});
+
+
+test('removing a transferred job keeps original-title comparisons with the right remaining job', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('paperpro-candidate-to-classic-v1', JSON.stringify({
+      version: 1, createdAt: Date.now(),
+      resume: {
+        name: '虚构测试人', title: '软件开发', email: '', phone: '',
+        location: '', links: [], summary: '', skills: [],
+        experience: [
+          { heading: '2020.01 — 2021.01  甲公司 ｜ 工程师', bullets: [] },
+          { heading: '2021.02 — 2022.02  乙公司 ｜ 分析师', bullets: [] },
+        ],
+        projects: [], education: [], additional: [],
+      },
+      advice: [],
+      headingComparisons: [
+        { index: 0, original: '甲公司｜平台部门（原始）', projected: '甲公司 ｜ 工程师' },
+        { index: 1, original: '乙公司｜海外协作（原始）', projected: '乙公司 ｜ 分析师' },
+      ],
+    }));
+  });
+  await page.goto('/classic');
+  await expect(page.getByTestId('handoff-heading-comparison-0')).toContainText('平台部门（原始）');
+  await expect(page.getByTestId('handoff-heading-comparison-1')).toContainText('海外协作（原始）');
+  await page.getByTestId('工作经历').getByRole('button', {name: '删除此条'}).first().click();
+  await expect(page.getByTestId('handoff-heading-comparison-1')).toHaveCount(0);
+  await expect(page.getByTestId('handoff-heading-comparison-0')).toContainText('海外协作（原始）');
+  await expect(page.getByTestId('handoff-heading-comparison-0')).not.toContainText('平台部门（原始）');
+  await expect(page.getByTestId('resume-preview')).toContainText('乙公司');
+  await expect(page.getByTestId('resume-preview')).not.toContainText('甲公司');
+  await expect(page.getByTestId('download-docx')).toBeDisabled();
+});
+
+
+test('deleting a reviewed entry shifts its source heading comparison without misattribution', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('paperpro-candidate-to-classic-v1', JSON.stringify({
+      version: 1, createdAt: Date.now(),
+      resume: {
+        name: '模拟求职者', title: '后端工程师', email: '', phone: '',
+        location: '', links: [], summary: '', skills: [],
+        education: [], projects: [], additional: [],
+        experience: [
+          { heading: '2021.01 — 2022.12 甲公司 ｜ 开发', bullets: [] },
+          { heading: '2023.01 — 2024.12 乙公司 ｜ 运维', bullets: [] },
+        ],
+      },
+      targetRole: '后端工程师', jobDescription: '', advice: [],
+      headingComparisons: [
+        { index: 0, original: '甲公司 - 开发 - 甲项目部', projected: '2021.01 — 2022.12 甲公司 ｜ 开发' },
+        { index: 1, original: '乙公司 - 运维 - 乙平台组', projected: '2023.01 — 2024.12 乙公司 ｜ 运维' },
+      ],
+    }));
+  });
+  await page.goto('/classic');
+  await expect(page.getByTestId('handoff-heading-comparison-0')).toContainText('甲项目部');
+  await expect(page.getByTestId('handoff-heading-comparison-1')).toContainText('乙平台组');
+  await page.getByTestId('工作经历').getByRole('button', { name: '删除此条' }).first().click();
+  await expect(page.getByTestId('handoff-heading-comparison-1')).toHaveCount(0);
+  await expect(page.getByTestId('handoff-heading-comparison-0')).toContainText('乙平台组');
+  await expect(page.getByTestId('handoff-heading-comparison-0')).not.toContainText('甲项目部');
+  await expect(page.getByTestId('resume-preview')).not.toContainText('甲公司');
+  await expect(page.getByTestId('resume-preview')).toContainText('乙公司');
+});
+
+
+test('stale or malformed one-shot handoff cannot prefill the classic editor', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('paperpro-candidate-to-classic-v1', JSON.stringify({
+      version: 1, createdAt: Date.now() - 31 * 60 * 1000,
+      resume: { name: '过期候选人', experience: [] }, advice: [],
+    }));
+  });
+  await page.goto('/classic');
+  await expect(page.getByTestId('demo-button')).toBeVisible();
+  await expect(page.getByTestId('field-name')).toHaveCount(0);
+  await expect(page.getByTestId('handoff-advice')).toHaveCount(0);
+  expect(await page.evaluate(() => sessionStorage.getItem('paperpro-candidate-to-classic-v1'))).toBeNull();
+});
+
+
 test('legacy resume editor remains available on /classic', async ({ page }) => {
   await page.goto('/classic');
   await expect(page.getByTestId('demo-button')).toBeVisible();
