@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 import pymupdf
+from app.pdf_runtime import serialized_pdf
 
 from .adapter import DATE_RANGE, _normalized_month
 from .schema import WorkRelationHint
@@ -98,6 +99,7 @@ def _normalized_box(span: dict, page: pymupdf.Page) -> tuple[float, float, float
     return result
 
 
+@serialized_pdf
 def propose_existing_work_relations(
     candidate, pdf_bytes: bytes, *, method: str
 ) -> list[dict]:

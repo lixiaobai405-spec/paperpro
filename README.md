@@ -1,5 +1,11 @@
 # PaperPro · 智能简历诊断与增强工作台
 
+## Linux / Docker 交付
+
+已增加独立的 Docker Compose 部署配置，适用于 root 管理的多项目 Linux 服务器。镜像内使用 LibreOffice 读取旧版 DOC，并由同一份 DOCX 模板转换 PDF，包含中文字体、超时/并发限制及运行健康检查。Windows 默认 Word 路径保留。服务器安装、环境变量、现有 Nginx/宝塔接入、验收、更新备份和镜像回退见 [Linux 部署说明](docs/DEPLOYMENT_LINUX.md)。
+
+在项目根目录执行 `uv run --locked --python 3.12 python -m scripts.package_deployment` 可生成排除真实密钥、本地依赖和测试产物的源码交付 ZIP；不要直接压缩整个项目目录。服务器共用 AI Key 需在 HTTPS 和访问限制配置完成后单独填写。
+
 PaperPro 现有两条独立但共用解析与设置基础设施的流程：**求职者端五维诊断**（默认入口）和**经典简历编辑**（保留原功能）。上传数据默认本机处理；从不自动改写用户上传的原始文件。
 
 ## 快速使用
@@ -19,7 +25,7 @@ PaperPro 现有两条独立但共用解析与设置基础设施的流程：**求
     cd ..
     uv run --python 3.12 python -m uvicorn app.main:app --host 127.0.0.1 --port 8766
 
-不得使用 Anaconda/Miniconda；Python 由 uv 管理。前端采用 React + Vite + Mantine + Tabler Icons，后端 FastAPI + RapidOCR + PyMuPDF + python-docx。Microsoft Word 负责高保真 DOCX→PDF 和旧版 DOC 读取；当 Word 不可用时有基础 PDF 备用引擎，极罕见非 BMP 字符会明确拒绝错误导出。
+不得使用 Anaconda/Miniconda；Python 由 uv 管理。前端采用 React + Vite + Mantine + Tabler Icons，后端 FastAPI + RapidOCR + PyMuPDF + python-docx。Windows 默认由 Microsoft Word 处理 DOCX→PDF 和旧版 DOC；Linux Docker 使用 LibreOffice 和已安装的中文字体。自动模式可使用基础 PDF 备用引擎，极罕见非 BMP 字符会明确拒绝错误导出；容器默认严格使用 LibreOffice，失败时明确报错。
 
 ## 求职者端 · 五步诊断（默认首页）
 

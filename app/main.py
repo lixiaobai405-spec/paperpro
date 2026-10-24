@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from .enhancer import ai_enhance, local_enhance
 from .exporter import make_docx, make_pdf
@@ -62,7 +63,7 @@ async def extract(file: UploadFile = File(...)):
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="文件不能超过 12 MB")
     try:
-        text, warnings, method = extract_file(name, data)
+        text, warnings, method = await run_in_threadpool(extract_file, name, data)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except TypeError as exc:

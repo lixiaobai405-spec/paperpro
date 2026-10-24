@@ -8,6 +8,7 @@ All blocks and characters are kept; only their reading order changes.
 """
 from __future__ import annotations
 import pymupdf
+from app.pdf_runtime import serialized_pdf
 
 
 def _pdf_text_blocks(page: pymupdf.Page) -> list[dict]:
@@ -138,6 +139,7 @@ def conservative_complement(
     return result,changes
 
 
+@serialized_pdf
 def augment_missing_fields_from_pdf(
     candidate, content: bytes, *, method: str,
 ) -> tuple[object,list[str]]:

@@ -13,6 +13,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Mm, Pt, RGBColor
 
 from .models import Resume
+from .document_converter import ConversionError, convert_document
 
 
 NAVY = RGBColor(24, 43, 74)
@@ -20,14 +21,21 @@ SLATE = RGBColor(91, 106, 126)
 ACCENT = RGBColor(53, 115, 219)
 
 
+def _template_font() -> str:
+    return os.environ.get("PAPERPRO_RESUME_FONT", "").strip() or (
+        "Microsoft YaHei" if os.name == "nt" else "Noto Sans CJK SC"
+    )
+
+
 def _set_font(run, *, size: float, bold: bool = False, color=NAVY) -> None:
-    run.font.name = "Microsoft YaHei"
+    font = _template_font()
+    run.font.name = font
     run.font.size = Pt(size)
     run.font.bold = bold
     run.font.color.rgb = color
     fonts = run._element.get_or_add_rPr().rFonts
     if fonts is not None:
-        fonts.set(qn("w:eastAsia"), "Microsoft YaHei")
+        fonts.set(qn("w:eastAsia"), font)
 
 
 def _heading(doc: Document, name: str) -> None:
@@ -69,7 +77,8 @@ def make_docx(resume: Resume) -> bytes:
     section.header_distance = Inches(.32)
     section.footer_distance = Inches(.32)
     normal = doc.styles["Normal"]
-    normal.font.name = "Microsoft YaHei"
+    normal.font.name = _template_font()
+    normal.element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), _template_font())
     normal.font.size = Pt(9.1)
     normal.paragraph_format.space_after = Pt(0)
 
@@ -179,11 +188,14 @@ def _fallback_pdf(resume: Resume) -> bytes:
     # ReportLab's TrueType fallback cannot encode non-BMP glyphs correctly.
     # Never return a PDF with a corrupted candidate name: Word handles this path.
     if any(ord(char) > 0xFFFF for char in str(resume.model_dump())):
-        raise ValueError("当前备用 PDF 引擎无法保证罕见汉字不丢失，请使用 Word 导出或检查 Word 转换服务")
+        raise ValueError("当前备用 PDF 引擎无法保证罕见汉字不丢失，请使用 Word/LibreOffice 导出或检查转换服务")
     main_font = "STSong-Light"
     font_dir = Path("C:/Windows/Fonts")
     if (font_dir / "simhei.ttf").exists():
         pdfmetrics.registerFont(TTFont("PPChinese", str(font_dir / "simhei.ttf")))
+        main_font = "PPChinese"
+    elif Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc").exists():
+        pdfmetrics.registerFont(TTFont("PPChinese", "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", subfontIndex=0))
         main_font = "PPChinese"
     else:
         pdfmetrics.registerFont(UnicodeCIDFont(main_font))
@@ -193,7 +205,7 @@ def _fallback_pdf(resume: Resume) -> bytes:
         topMargin=45, bottomMargin=46,
         title="Resume", author=""
     )
-    main = ParagraphStyle("main", fontName=main_font, fontSize=9, leading=14, textColor=colors.HexColor("#334155"))
+    main = ParagraphStyle("main", fontName=main_font, fontSize=9, leading=14, wordWrap="CJK", textColor=colors.HexColor("#334155"))
     bold = ParagraphStyle("bold", parent=main, fontSize=10.3, leading=16, textColor=colors.HexColor("#182B4A"))
     title = ParagraphStyle("title", parent=bold, fontSize=22, leading=29)
     small = ParagraphStyle("small", parent=main, fontSize=8, leading=11)
@@ -243,10 +255,26 @@ def _fallback_pdf(resume: Resume) -> bytes:
 
 
 def make_pdf(resume: Resume, docx_data: bytes | None = None) -> bytes:
+    engine = os.environ.get("PAPERPRO_PDF_ENGINE", "auto")
+    if engine not in {"auto", "libreoffice", "word", "reportlab"}:
+        raise ValueError("PAPERPRO_PDF_ENGINE 必须是 auto、libreoffice、word 或 reportlab")
+    if engine == "reportlab":
+        return _fallback_pdf(resume)
     document = docx_data if docx_data is not None else make_docx(resume)
+    if engine == "libreoffice":
+        return convert_document(document, "docx", "pdf")
+    if engine == "word" and os.name != "nt":
+        raise ValueError("Word PDF 引擎仅支持 Windows，请使用 LibreOffice")
     if os.name == "nt":
         try:
             return _word_pdf(document)
         except Exception as exc:
+            if engine == "word":
+                raise
             logging.warning("Word PDF conversion failed; using safe PDF renderer: %s", type(exc).__name__)
+    else:
+        try:
+            return convert_document(document, "docx", "pdf")
+        except ConversionError as exc:
+            logging.warning("LibreOffice PDF conversion failed; using safe PDF renderer: %s", type(exc).__name__)
     return _fallback_pdf(resume)
