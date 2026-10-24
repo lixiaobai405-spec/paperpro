@@ -7,18 +7,21 @@ import os
 from pathlib import Path
 import re
 import tempfile
-from zipfile import BadZipFile, ZipFile
+import threading
 
 import pymupdf
 from docx import Document
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .models import Education, Entry, Resume
+from .document_converter import convert_document, validate_docx
+from .pdf_runtime import PDF_LOCK
 
 
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
 MAX_PDF_PAGES = 25
 MAX_IMAGE_PIXELS = 22_000_000
+_OCR_LOCK = threading.Lock()
 
 SECTION_LABELS = {
     "summary": [
@@ -261,10 +264,24 @@ def parse_resume(text: str) -> Resume:
 @lru_cache(maxsize=1)
 def _ocr_engine():
     from rapidocr_onnxruntime import RapidOCR
-    return RapidOCR()
+    options = {}
+    configured = os.environ.get("PAPERPRO_OCR_THREADS")
+    if configured:
+        import cv2
+        threads = max(1, min(int(configured), os.cpu_count() or 1))
+        cv2.setNumThreads(threads)
+        options = {"intra_op_num_threads": threads, "inter_op_num_threads": 1}
+    return RapidOCR(**options)
 
 
 def _ocr_image(image: Image.Image) -> str:
+    # RapidOCR mutates inference state and lru_cache is not single-flight.
+    # Serialize lazy initialization and calls when uploads use worker threads.
+    with _OCR_LOCK:
+        return _ocr_image_unlocked(image)
+
+
+def _ocr_image_unlocked(image: Image.Image) -> str:
     import numpy as np
     image = ImageOps.exif_transpose(image)
     if image.width * image.height > MAX_IMAGE_PIXELS:
@@ -358,9 +375,17 @@ def _docx_text(data: bytes) -> tuple[str, list[str], bool]:
     return "\n".join(ordered), warnings, bool(image_parts)
 
 
-def _doc_text(data: bytes) -> str:
+def _doc_text(data: bytes) -> tuple[str, list[str], str]:
     if os.name != "nt":
-        raise ValueError("旧版 .doc 需要 Windows 上的 Microsoft Word。请另存为 .docx。")
+        converted = convert_document(data, "doc", "docx")
+        validate_docx(converted)
+        text, warnings, has_image = _docx_text(converted)
+        warnings.insert(0, "旧版 DOC 已通过 LibreOffice 转换后读取，请对照原件核对内容")
+        return text, warnings, "libreoffice-doc+ocr" if has_image else "libreoffice-doc"
+    return _word_doc_text(data), [], "word-doc"
+
+
+def _word_doc_text(data: bytes) -> str:
     import pythoncom
     import win32com.client
     with tempfile.TemporaryDirectory(prefix="paperpro-doc-") as tmp:
@@ -394,7 +419,7 @@ def _doc_text(data: bytes) -> str:
                 pythoncom.CoUninitialize()
 
 
-def extract_file(filename: str, data: bytes) -> tuple[str, list[str], str]:
+def _extract_file(filename: str, data: bytes) -> tuple[str, list[str], str]:
     if not data:
         raise ValueError("文件为空")
     if len(data) > MAX_UPLOAD_BYTES:
@@ -450,13 +475,8 @@ def extract_file(filename: str, data: bytes) -> tuple[str, list[str], str]:
         except Exception as exc:
             raise ValueError(f"PDF 无法解析：{exc}") from exc
     elif extension == ".docx":
-        if not data.startswith(b"PK"):
-            raise ValueError("文件内容不是有效的 DOCX")
         try:
-            with ZipFile(BytesIO(data)) as compressed:
-                records = compressed.infolist()
-                if len(records) > 1000 or sum(record.file_size for record in records) > 48 * 1024 * 1024:
-                    raise ValueError("DOCX 解压内容超过安全限制，请先精简或压缩图片")
+            validate_docx(data)
             content, docx_warnings, has_image = _docx_text(data)
             warnings.extend(docx_warnings)
         except Exception as exc:
@@ -465,8 +485,8 @@ def extract_file(filename: str, data: bytes) -> tuple[str, list[str], str]:
     elif extension == ".doc":
         if not data.startswith(bytes.fromhex("D0CF11E0A1B11AE1")):
             raise ValueError("文件内容不是有效的旧版 DOC")
-        content = _doc_text(data)
-        method = "word-doc"
+        content, doc_warnings, method = _doc_text(data)
+        warnings.extend(doc_warnings)
     elif extension in {".png", ".jpg", ".jpeg"}:
         try:
             image = Image.open(BytesIO(data))
@@ -484,3 +504,10 @@ def extract_file(filename: str, data: bytes) -> tuple[str, list[str], str]:
     if not content or len(re.sub(r"\s", "", content)) < 3:
         raise ValueError("未识别到有效文字，请使用清晰扫描件或可复制文字的文档")
     return content, warnings, method
+
+
+def extract_file(filename: str, data: bytes) -> tuple[str, list[str], str]:
+    if Path(filename).suffix.lower() == ".pdf":
+        with PDF_LOCK:
+            return _extract_file(filename, data)
+    return _extract_file(filename, data)

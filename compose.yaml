@@ -1,0 +1,33 @@
+name: paperpro
+
+services:
+  app:
+    image: paperpro:${PAPERPRO_IMAGE_TAG:-local}
+    build:
+      context: .
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PAPERPRO_PORT:-8766}:8766"
+    environment:
+      PAPERPRO_PDF_ENGINE: ${PAPERPRO_PDF_ENGINE:-libreoffice}
+      PAPERPRO_RESUME_FONT: ${PAPERPRO_RESUME_FONT:-Noto Sans CJK SC}
+      PAPERPRO_DEEPSEEK_API_KEY: ${PAPERPRO_DEEPSEEK_API_KEY:-}
+      PAPERPRO_OPENAI_API_KEY: ${PAPERPRO_OPENAI_API_KEY:-}
+      PAPERPRO_OPENAI_BASE_URL: ${PAPERPRO_OPENAI_BASE_URL:-}
+      PAPERPRO_OPENAI_MODEL: ${PAPERPRO_OPENAI_MODEL:-}
+    read_only: true
+    tmpfs:
+      - /tmp:size=268435456,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 1.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

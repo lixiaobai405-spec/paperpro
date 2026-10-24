@@ -14,3 +14,5 @@ settings.local.json
 # HR calibration datasets contain private resume facts; never commit.
 evaluation_private/
 *.pyc
+# Generated deployment archives; keep existing user test PDFs untouched.
+/output/delivery/

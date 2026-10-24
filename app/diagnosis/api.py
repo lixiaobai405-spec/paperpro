@@ -12,6 +12,7 @@ from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.exporter import make_docx, make_pdf
 from app.models import Resume
@@ -56,7 +57,7 @@ async def parse_uploaded(file: UploadFile = File(...)):
         raise HTTPException(status_code=422,detail="文件为空，请重新选择")
     checksum=sha256(original).hexdigest()
     try:
-        text,warnings,method=extract_file(file.filename or "resume"+suffix,original)
+        text,warnings,method=await run_in_threadpool(extract_file,file.filename or "resume"+suffix,original)
     except (ValueError,TypeError) as exc:
         raise HTTPException(status_code=422,detail=str(exc)) from exc
     # Source SHA is of the exact uploaded bytes, not re-serialized content.
@@ -65,7 +66,7 @@ async def parse_uploaded(file: UploadFile = File(...)):
     review_hints=[]
     if suffix==".pdf" and method=="pdf-text":
         try:
-            draft,additional=augment_missing_fields_from_pdf(
+            draft,additional=await run_in_threadpool(augment_missing_fields_from_pdf,
                 draft,original,method=method,
             )
             if additional:
@@ -78,7 +79,7 @@ async def parse_uploaded(file: UploadFile = File(...)):
             # The old deterministic parser is still the source of truth.
             warnings.append("多栏辅助识别未完成；已保留常规解析结果，请人工核对。")
         try:
-            review_hints=propose_existing_work_relations(
+            review_hints=await run_in_threadpool(propose_existing_work_relations,
                 draft,original,method=method,
             )
             if review_hints:
