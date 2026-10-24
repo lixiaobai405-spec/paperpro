@@ -116,6 +116,13 @@ class PasteRequest(BaseModel):
     text: str = Field(min_length=1, max_length=100_000)
 
 
+class StructureRequest(BaseModel):
+    resume: CandidateResume
+    ai_consent: bool = False
+    ai_provider: Literal["deepseek", "configured"] = "deepseek"
+    api_key: str | None = Field(default=None, repr=False, exclude=True)
+
+
 class SelectionRequest(BaseModel):
     report: dict
     selected_ids: list[str] = Field(max_length=100)

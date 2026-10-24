@@ -28,11 +28,15 @@ def test_pdf_fallback_bmp_chinese_is_searchable(monkeypatch):
     assert abs(page.rect.height - 841.9) < 1
 
 
-def test_ai_signed_metrics_unchanged():
+def test_ai_signed_metric_change_is_flagged_for_review_not_applied():
+    from app.enhancer import _changes
     source = Resume(name="Alex", summary="Revenue declined -20%")
     proposal = {"summary": "Revenue declined 20%", "experience_bullets": [], "project_bullets": []}
-    with pytest.raises(ValueError):
-        validate_ai_rewrite(source, proposal)
+    suggested = validate_ai_rewrite(source, proposal)
+    changes = _changes(source, suggested)
+    assert len(changes) == 1
+    assert any("数字" in flag for flag in changes[0]["review_flags"])
+    assert source.summary == "Revenue declined -20%"
 
 
 def test_mocked_ai_happy_path_no_fact_added(monkeypatch):

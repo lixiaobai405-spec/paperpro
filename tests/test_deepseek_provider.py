@@ -64,8 +64,8 @@ def test_deepseek_provider_routes_only_to_official_endpoint(monkeypatch):
     assert calls[0][1]["json"]["response_format"] == {"type": "json_object"}
 
 
-def test_job_description_cannot_become_unverified_candidate_skill(monkeypatch):
-    """An untrusted JD mentions Kubernetes, but only Python is reviewed."""
+def test_job_description_skill_proposal_requires_human_review_not_request_failure(monkeypatch):
+    """A skill introduced by the model becomes an unchecked, flagged suggestion."""
     class Response:
         def raise_for_status(self):
             return None
@@ -98,8 +98,10 @@ def test_job_description_cannot_become_unverified_candidate_skill(monkeypatch):
         "target_role": "后端开发",
         "job_description": "要求 Kubernetes 和 Docker 实战经验",
     })
-    assert response.status_code == 422
-    assert "新增了" in response.json()["detail"]
+    assert response.status_code == 200
+    data = response.json()
+    assert data["resume"]["experience"][0]["bullets"][0].endswith("Kubernetes 开发 API")
+    assert any("技术" in note for note in data["changes"][0]["review_flags"])
     assert "EPHEMERAL_TEST_TOKEN" not in response.text
 
 

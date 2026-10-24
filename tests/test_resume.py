@@ -77,15 +77,21 @@ def test_local_enhancement_preserves_numbers_and_identity():
     assert isinstance(changes, list)
 
 
-def test_ai_rewrite_protected_facts_and_numbers():
+def test_ai_rewrite_keeps_identity_and_flags_new_numeric_claims_for_human_review():
+    from app.enhancer import _changes
     source = parse_resume(SAMPLE)
-    malicious = {
+    proposal = {
         "summary": "拥有10年经验，曾获国际冠军",
         "experience_bullets": [["降低接口响应时间90%", "负责数据库设计"]],
         "project_bullets": [["使用Python构建分析模块"]],
+        "name": "AI 编造的名字",
     }
-    with pytest.raises(ValueError):
-        validate_ai_rewrite(source, malicious)
+    suggested = validate_ai_rewrite(source, proposal)
+    assert suggested.name == source.name
+    assert source.summary != suggested.summary
+    flagged = _changes(source, suggested)
+    assert any("数字" in warning for change in flagged for warning in change["review_flags"])
+    assert source.model_dump() == parse_resume(SAMPLE).model_dump()
 
 
 def test_docx_and_pdf_have_expected_text():

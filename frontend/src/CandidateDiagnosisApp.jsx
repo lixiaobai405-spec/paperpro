@@ -259,6 +259,8 @@ export default function CandidateDiagnosisApp() {
   const [aiEnabled,setAiEnabled]=useState(false);
   const [aiConsent,setAiConsent]=useState(false);
   const [aiKey,setAiKey]=useState("");
+  const [structureConsent,setStructureConsent]=useState(false);
+  const [structureSuggestion,setStructureSuggestion]=useState(null);
   const [report,setReport]=useState(null);
   const [selected,setSelected]=useState([]);
   const [selectedQuestions,setSelectedQuestions]=useState([]);
@@ -280,7 +282,8 @@ export default function CandidateDiagnosisApp() {
     // The inputs bind an in-flight diagnosis: changing any input revokes the
     // older response, including the case where report generation is pending.
     requestId.current += 1;
-    setBusy(previous => previous === 'report' ? '' : previous);
+    setBusy(previous => ['report','structure'].includes(previous) ? '' : previous);
+    setStructureSuggestion(null);
     setReport(null);setSelected([]);setSelectedQuestions([]);
     setNavNotice('信息已更新，原有报告已作废，需要重新生成。');
   }
@@ -336,6 +339,7 @@ export default function CandidateDiagnosisApp() {
       result.review_hints.filter(h=>h.status==='unverified' && Number.isInteger(h.experience_index)) : []);
     setFileMeta({name:result.filename,method:result.method,sha256:result.sha256,warnings:result.warnings||[]});
     setReport(null);setSelected([]);setSelectedQuestions([]);setNavNotice('');
+    setStructureSuggestion(null);setStructureConsent(false);
     setStep(1);
   }
   async function importFile(file){
@@ -367,6 +371,28 @@ export default function CandidateDiagnosisApp() {
       receive(data);
     }catch(e){if(token===requestId.current)setError(e.message);}
     finally{if(token===requestId.current)setBusy('');}
+  }
+  async function suggestStructure(){
+    if(!resume?.source_text?.trim() || !structureConsent || busy)return;
+    const token=++requestId.current;
+    setStructureSuggestion(null);setBusy('structure');setError('');setNavNotice('');
+    try{
+      const result=await api('/api/diagnosis/ai-structure',{
+        resume,ai_consent:structureConsent,ai_provider:'deepseek',api_key:aiKey
+      });
+      if(token!==requestId.current)return;
+      if(result.status!=='proposal' || !result.resume)throw new Error('模型未返回可核对的整理草稿');
+      setStructureSuggestion(result.resume);
+    }catch(e){if(token===requestId.current)setError(e.message);}
+    finally{if(token===requestId.current)setBusy('');}
+  }
+  function acceptStructure(){
+    if(!structureSuggestion || busy)return;
+    setResume(structureSuggestion);
+    setReviewHints([]);
+    invalidate();
+    setStructureConsent(false);
+    setNavNotice('已采用 AI 整理草稿。请核对字段与原文后继续；没有被删除的未分类原文仍在表单中。');
   }
   async function generate(){
     if(!resume||(!target.role.trim()&&!target.company.trim())||busy)return;
@@ -418,7 +444,7 @@ export default function CandidateDiagnosisApp() {
     if(newStep>step)return;
     if(newStep===3&&!report)return;
     if(newStep===4&&!report)return;
-    if(busy==='report' && newStep<step){
+    if(['report','structure'].includes(busy) && newStep<step){
       requestId.current += 1;
       setBusy('');
     }
@@ -462,7 +488,7 @@ export default function CandidateDiagnosisApp() {
         {error&&<Alert mb="lg" color="red" withCloseButton onClose={()=>setError('')} title="操作未完成">{error}</Alert>}
         {navNotice&&<Alert mb="lg" color="orange" withCloseButton onClose={()=>setNavNotice('')}>{navNotice}</Alert>}
         {busy&&<Paper p="md" className="diag-loading" mb="lg">
-          <Group gap="sm"><Loader size="sm"/><div><Text fw={700} size="sm">{busy==='parse'?'正在识别简历文字与结构':busy==='report'?'正在核算岗位要求与五维证据':'正在导出已勾选清单'}</Text>
+          <Group gap="sm"><Loader size="sm"/><div><Text fw={700} size="sm">{busy==='parse'?'正在识别简历文字与结构':busy==='structure'?'正在生成可选的 AI 整理草稿':busy==='report'?'正在核算岗位要求与五维证据':'正在导出已勾选清单'}</Text>
           <Text size="xs" c="dimmed">{elapsed} 秒 · {elapsed>=10?'已超过 10 秒，仍在处理，请稍候；原文件不会更改。':'请稍候，结果生成后自动进入下一步。'}</Text></div></Group>
         </Paper>}
 
@@ -536,11 +562,56 @@ export default function CandidateDiagnosisApp() {
               </Group>
             </Paper>)}
           </Panel>}
+          <Panel title="可选 · AI 整理松散简历"
+            extra={<Status text="只在主动请求时调用" color="gray"/>}
+            testId="candidate-ai-structure-panel">
+            <Text size="sm" mb="md">
+              没有标准标题、项目和工作描述混在一起，也可以直接往下走。
+              如需模型帮忙识别字段，先生成一份建议草稿，确认后才会替换下方表单。
+            </Text>
+            <Checkbox checked={structureConsent}
+              onChange={e=>setStructureConsent(e.currentTarget.checked)}
+              label="我同意仅在点击 AI 整理时，将本次简历原文发送给 DeepSeek"
+              data-testid="candidate-structure-consent"/>
+            <TextInput mt="sm" type="password" autoComplete="off"
+              label="DeepSeek API Key（可留空使用本地配置）"
+              value={aiKey} onChange={e=>setAiKey(e.currentTarget.value)}
+              data-testid="candidate-structure-key"/>
+            <Button mt="md" variant="light" leftSection={<IconSparkles size={16}/>}
+              onClick={suggestStructure}
+              disabled={!structureConsent || !resume?.source_text?.trim() || !!busy}
+              loading={busy==='structure'} data-testid="candidate-structure-request">
+              生成可核对的整理草稿
+            </Button>
+            {structureSuggestion&&<Paper withBorder p="md" mt="md" radius="sm"
+              data-testid="candidate-structure-preview">
+              <Text fw={700} size="sm">AI 建议版（尚未应用）</Text>
+              <Text size="sm" mt="xs">姓名：{structureSuggestion.name||'待确认'} ·
+                工作经历 {structureSuggestion.experience?.length||0} 条 ·
+                项目 {structureSuggestion.projects?.length||0} 项 ·
+                技能 {structureSuggestion.skills?.length||0} 项</Text>
+              <Text size="sm" mt="xs">工作：
+                {(structureSuggestion.experience||[]).slice(0,3)
+                  .map(e=>[e.company,e.role].filter(Boolean).join(' / '))
+                  .filter(Boolean).join('；')||'请自行查看并补齐'}</Text>
+              <Text size="xs" c="orange" mt="sm">
+                这只是模型的结构猜测，可能遗漏或误归属；请对照上方原文核实，
+                采纳后仍可自由编辑、忽略建议并继续生成报告。
+              </Text>
+              <Button mt="sm" onClick={acceptStructure}
+                data-testid="candidate-structure-accept">采纳草稿，返回校对表单</Button>
+            </Paper>}
+          </Panel>
           <ResumeEditor resume={resume} update={modify} updateExperience={(i,f,v)=>modifyEntry('experience',i,f,v)}
             updateEntry={modifyEntry} addEntry={addEntry} removeEntry={removeEntry}/>
           <Group justify="space-between" mt="xl">
             <Button variant="subtle" leftSection={<IconArrowLeft size={16}/>} onClick={()=>setStep(0)}>返回更换文件</Button>
-            <Button rightSection={<IconArrowRight size={16}/>} onClick={()=>setStep(2)} data-testid="candidate-next-target">下一步 · 设置目标</Button>
+            <Button rightSection={<IconArrowRight size={16}/>} onClick={()=>{
+              // An optional AI request must never hold the main wizard hostage.
+              if(busy==='structure'){requestId.current+=1;setBusy('');}
+              setStructureSuggestion(null);
+              setStep(2);
+            }} data-testid="candidate-next-target">下一步 · 设置目标</Button>
           </Group>
         </>}
 

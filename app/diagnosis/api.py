@@ -18,10 +18,10 @@ from app.models import Resume
 from app.parser import extract_file
 from .adapter import convert_resume, from_text
 from .engine import run_diagnosis
-from .narrative import add_ai_explanations
+from .narrative import add_ai_explanations, propose_resume_structure
 from .pdf_layout import augment_missing_fields_from_pdf
 from .work_relation import propose_existing_work_relations
-from .schema import DiagnosisRequest, PasteRequest, SelectionRequest
+from .schema import DiagnosisRequest, PasteRequest, SelectionRequest, StructureRequest
 from .scoring import load_rules
 
 router = APIRouter(prefix="/api/diagnosis")
@@ -102,6 +102,27 @@ def paste_text(data: PasteRequest):
     return {"status":"ok","filename":"粘贴文本",
             "method":"paste","sha256":draft.source_sha256,
             "resume":draft.model_dump(),"source_text":data.text,"warnings":[]}
+
+
+@router.post("/ai-structure")
+def structure_loose_resume(request: StructureRequest):
+    if not request.ai_consent:
+        raise HTTPException(status_code=422, detail="发送简历给 AI 整理前必须明确授权")
+    try:
+        return propose_resume_structure(
+            request.resume,
+            request_api_key=request.api_key,
+            provider=request.ai_provider,
+        )
+    except ValueError as exc:
+        # Do not echo untrusted provider responses or request credentials.
+        raise HTTPException(
+            status_code=422, detail="AI 整理未能生成可用草稿，请保留本地解析结果"
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502, detail="AI 服务暂时不可用，可直接继续人工校对和诊断"
+        ) from exc
 
 
 @router.post("/report")

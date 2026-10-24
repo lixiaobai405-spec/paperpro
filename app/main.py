@@ -101,7 +101,8 @@ def enhance(request: EnhanceRequest):
     return {
         "resume": result.model_dump(), "changes": changes, "mode": mode,
         "warnings": [
-            "AI 的定性措辞仍可能偏离事实，下载前请对照原文核实。"
+            "AI 只提供可选草稿；数字、技能和职责表述请逐条核对，未经勾选不会应用。",
+            "如模型建议无法对应原有条目，系统会保留该部分原文，不影响其他可审核建议。"
         ] if mode == "ai" else [
             "本地模式只整理文字格式，不会调用外部 AI 服务。"
         ],
@@ -111,10 +112,11 @@ def enhance(request: EnhanceRequest):
 @app.post("/api/export")
 def export_document(request: ExportRequest, format: Literal["docx", "pdf"] = Query(...)):
     draft = request.resume
-    if not draft.name.strip() or not (
-        draft.summary.strip() or draft.skills or draft.experience or draft.projects or draft.education or draft.additional
+    if not (
+        draft.summary.strip() or draft.skills or draft.experience or draft.projects
+        or draft.education or draft.additional
     ):
-        raise HTTPException(status_code=422, detail="请填写姓名及至少一项履历内容后再导出")
+        raise HTTPException(status_code=422, detail="请至少保留一项履历内容后再导出")
     if len(str(draft.model_dump())) > 100_000:
         raise HTTPException(status_code=413, detail="简历内容过长")
     try:
