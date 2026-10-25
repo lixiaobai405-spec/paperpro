@@ -25,6 +25,7 @@ test('candidate wizard: pasted resume, editable fields, target gate, five dimens
   expect(rowCount).toBeGreaterThanOrEqual(6);
   await expect(page.getByText(/不是实际企业录用概率/)).toBeVisible();
   await page.getByTestId('candidate-next-todo').click();
+  await page.getByTestId('candidate-more-advice').locator('summary').click();
   await expect(page.getByTestId('advice-advice-01')).toBeVisible();
   await expect(page.getByText('可选深化', { exact: true }).first()).toBeVisible();
   const checkboxes = page.getByTestId('advice-advice-01').locator('input[type="checkbox"]');
@@ -276,6 +277,7 @@ test('selected diagnosis advice hands off reviewed facts to classic exactly once
   await page.getByLabel('目标岗位 JD（可选，但推荐）').fill('负责 Python API、SQL 数据库与 Docker 部署。');
   await page.getByTestId('candidate-generate').click();
   await page.getByTestId('candidate-next-todo').click();
+  await page.getByTestId('candidate-more-advice').locator('summary').click();
   await page.getByTestId('advice-advice-01').locator('input[type=checkbox]').check();
   let unexpectedAiRequests = 0;
   page.on('request', request => {

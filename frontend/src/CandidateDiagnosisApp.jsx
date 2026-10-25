@@ -12,8 +12,9 @@ import {
   IconShieldCheck, IconSparkles, IconTargetArrow, IconTrash,
 } from '@tabler/icons-react';
 import { createClassicHandoff, saveClassicHandoff } from './resumeHandoff.js';
+import RecommendedResumePreview from './RecommendedResumePreview.jsx';
 
-const STEPS = ['上传简历', '校对信息', '目标职位', '诊断报告', '优化清单'];
+const STEPS = ['上传简历', '校对信息', '目标职位', '诊断报告', '完整推荐稿'];
 const SECTIONS = [
   ['match','岗位匹配度量化'],
   ['experience','工作经验研判'],
@@ -262,6 +263,8 @@ export default function CandidateDiagnosisApp() {
   const [structureConsent,setStructureConsent]=useState(false);
   const [structureSuggestion,setStructureSuggestion]=useState(null);
   const [report,setReport]=useState(null);
+  const [recommendation,setRecommendation]=useState(null);
+  const [recommendConsent,setRecommendConsent]=useState(false);
   const [selected,setSelected]=useState([]);
   const [selectedQuestions,setSelectedQuestions]=useState([]);
   const [reviewHints,setReviewHints]=useState([]);
@@ -282,8 +285,9 @@ export default function CandidateDiagnosisApp() {
     // The inputs bind an in-flight diagnosis: changing any input revokes the
     // older response, including the case where report generation is pending.
     requestId.current += 1;
-    setBusy(previous => ['report','structure'].includes(previous) ? '' : previous);
+    setBusy(previous => ['report','structure','recommend','recommendAi'].includes(previous) ? '' : previous);
     setStructureSuggestion(null);
+    setRecommendation(null);setRecommendConsent(false);
     setReport(null);setSelected([]);setSelectedQuestions([]);
     setNavNotice('信息已更新，原有报告已作废，需要重新生成。');
   }
@@ -339,6 +343,7 @@ export default function CandidateDiagnosisApp() {
       result.review_hints.filter(h=>h.status==='unverified' && Number.isInteger(h.experience_index)) : []);
     setFileMeta({name:result.filename,method:result.method,sha256:result.sha256,warnings:result.warnings||[]});
     setReport(null);setSelected([]);setSelectedQuestions([]);setNavNotice('');
+    setRecommendation(null);setRecommendConsent(false);
     setStructureSuggestion(null);setStructureConsent(false);
     setStep(1);
   }
@@ -406,9 +411,82 @@ export default function CandidateDiagnosisApp() {
       });
       if(token!==requestId.current)return;
       setReport(result);setSelected([]);setSelectedQuestions([]);
+      setRecommendation(null);setRecommendConsent(false);
       setStep(3);
     }catch(e){if(token===requestId.current)setError(e.message);}
     finally{if(token===requestId.current)setBusy('');}
+  }
+  async function openRecommendation(){
+    if(!resume || !report || busy)return;
+    if(recommendation){setStep(4);return;}
+    const token=++requestId.current;
+    setBusy('recommend');setError('');
+    try{
+      const result=await api('/api/diagnosis/recommend',{resume,target,use_ai:false});
+      if(token!==requestId.current)return;
+      if(!result?.draft || !['local','ai','fallback'].includes(result.mode)){
+        throw new Error('暂未取得可编辑推荐稿');
+      }
+      setRecommendation(result);
+      setStep(4);
+    }catch(e){
+      if(token!==requestId.current)return;
+      // A missing optional enhancement must never destroy the reviewed draft.
+      setRecommendation({
+        mode:'fallback',draft:resume,improvements:[],questions:[],
+        notice:'暂未完成自动加强，以下是已校对的可编辑简历，仍可继续导出。'
+      });
+      setStep(4);
+    }finally{if(token===requestId.current)setBusy('');}
+  }
+  async function regenerateWithAi(){
+    if(!resume || !report || !recommendConsent || busy)return;
+    const token=++requestId.current;
+    setBusy('recommendAi');setError('');
+    try{
+      const result=await api('/api/diagnosis/recommend',{
+        resume,target,use_ai:true,ai_consent:true,ai_provider:'deepseek',api_key:aiKey
+      });
+      if(token!==requestId.current)return;
+      if(!result?.draft)throw new Error('AI 未提供可编辑草稿');
+      if(result.mode==='ai'){
+        setRecommendation(result);
+      }else{
+        setRecommendation(previous=>previous ? {...previous,
+          notice:result.notice||'模型暂时不可用；此前的可编辑推荐稿仍然保留。'} : result);
+      }
+    }catch(e){
+      if(token===requestId.current)setError('AI 增强未完成，现有推荐稿不受影响，可直接采用或导出。');
+    }finally{if(token===requestId.current)setBusy('');}
+  }
+  function changeRecommended(field,value){
+    setRecommendation(previous=>previous&&({
+      ...previous,edited:true,
+      draft:{...previous.draft,[field]:value},
+    }));
+  }
+  function changeRecommendedEntry(group,index,field,value){
+    setRecommendation(previous=>previous&&({
+      ...previous,edited:true,
+      draft:{...previous.draft,[group]:(previous.draft[group]||[]).map(
+        (entry,i)=>i===index?{...entry,[field]:value}:entry
+      )},
+    }));
+  }
+  function addRecommendedEntry(group){
+    const empty=group==='experience'
+      ? {heading:'',company:'',role:'',start_date:'',end_date:'',bullets:[]}
+      : group==='education'?{heading:'',details:[]}:{heading:'',bullets:[]};
+    setRecommendation(previous=>previous&&({
+      ...previous,edited:true,
+      draft:{...previous.draft,[group]:[...(previous.draft[group]||[]),empty]}
+    }));
+  }
+  function removeRecommendedEntry(group,index){
+    setRecommendation(previous=>previous&&({
+      ...previous,edited:true,
+      draft:{...previous.draft,[group]:(previous.draft[group]||[]).filter((_,i)=>i!==index)}
+    }));
   }
   async function exportSelected(kind,format){
     const choices=kind==='todo'?selected:selectedQuestions;
@@ -430,10 +508,12 @@ export default function CandidateDiagnosisApp() {
     }catch(e){setError(e.message);}
     finally{setBusy('');}
   }
-  function openClassicWithReviewedDraft(){
+  function openClassicWithReviewedDraft(version='original'){
     if(!resume || !report || busy)return;
+    const chosen=version==='recommended'?recommendation?.draft:resume;
+    if(!chosen)return;
     try{
-      const handoff=createClassicHandoff(resume,target,report,selected,fileMeta);
+      const handoff=createClassicHandoff(chosen,target,report,selected,fileMeta);
       // Only an explicit user click saves these local browser-tab facts.
       // It does not approve suggestions or enable any external AI provider.
       saveClassicHandoff(window.sessionStorage,handoff);
@@ -444,7 +524,7 @@ export default function CandidateDiagnosisApp() {
     if(newStep>step)return;
     if(newStep===3&&!report)return;
     if(newStep===4&&!report)return;
-    if(['report','structure'].includes(busy) && newStep<step){
+    if(['report','structure','recommend','recommendAi'].includes(busy) && newStep<step){
       requestId.current += 1;
       setBusy('');
     }
@@ -488,7 +568,7 @@ export default function CandidateDiagnosisApp() {
         {error&&<Alert mb="lg" color="red" withCloseButton onClose={()=>setError('')} title="操作未完成">{error}</Alert>}
         {navNotice&&<Alert mb="lg" color="orange" withCloseButton onClose={()=>setNavNotice('')}>{navNotice}</Alert>}
         {busy&&<Paper p="md" className="diag-loading" mb="lg">
-          <Group gap="sm"><Loader size="sm"/><div><Text fw={700} size="sm">{busy==='parse'?'正在识别简历文字与结构':busy==='structure'?'正在生成可选的 AI 整理草稿':busy==='report'?'正在核算岗位要求与五维证据':'正在导出已勾选清单'}</Text>
+          <Group gap="sm"><Loader size="sm"/><div><Text fw={700} size="sm">{busy==='parse'?'正在识别简历文字与结构':busy==='structure'?'正在生成可选的 AI 整理草稿':busy==='report'?'正在核算岗位要求与五维证据':['recommend','recommendAi'].includes(busy)?'正在整理完整推荐稿':'正在导出已勾选清单'}</Text>
           <Text size="xs" c="dimmed">{elapsed} 秒 · {elapsed>=10?'已超过 10 秒，仍在处理，请稍候；原文件不会更改。':'请稍候，结果生成后自动进入下一步。'}</Text></div></Group>
         </Paper>}
 
@@ -667,7 +747,21 @@ export default function CandidateDiagnosisApp() {
         </>}
 
         {step===3&&report&&<>
-          <StepTitle code="04" title="HR 视角诊断报告">依据校对后的文本分析。每个结论都保留依据位置；不掌握的资料会明确标为“未体现”，不会被视为事实证明。</StepTitle>
+          <StepTitle code="04" title="诊断已完成 · 下一步拿到整份简历">
+            报告用于解释和参考，不必先处理所有问题。可以直接生成一份完整、可编辑的推荐稿。
+          </StepTitle>
+          <Paper withBorder p="lg" radius="lg" mb="lg" data-testid="candidate-recommend-primary">
+            <Group justify="space-between" gap="md" wrap="wrap">
+              <div>
+                <Text fw={800} size="lg">先查看改好的简历</Text>
+                <Text c="dimmed" size="sm">无需先逐条处理诊断建议；按现有材料直接完成一份推荐稿。</Text>
+              </div>
+              <Button leftSection={<IconFileText size={17}/>} onClick={openRecommendation}
+                disabled={!!busy} data-testid="candidate-recommend-primary-cta">
+                生成完整推荐稿
+              </Button>
+            </Group>
+          </Paper>
           <div className="diag-report-meta"><div><strong>岗位：{target.role||'未提供'} </strong> / 公司：{target.company||'未提供'}</div>
             <div>生成时间 {report.meta.generated_at} · 规则版本 {report.meta.rules_version}</div></div>
           {report.meta.ai_narrative&&<Alert mb="lg" color={report.meta.ai_narrative==='completed'?'teal':'orange'} variant="light">
@@ -692,14 +786,79 @@ export default function CandidateDiagnosisApp() {
             {report.meta.disclaimer}
           </Alert>
           <Group justify="space-between" mt="xl">
-            <Button variant="subtle" leftSection={<IconArrowLeft size={16}/>} onClick={()=>setStep(2)}>返回修改目标</Button>
-            <Button rightSection={<IconArrowRight size={16}/>} onClick={()=>setStep(4)} data-testid="candidate-next-todo">查看优化建议 · 逐项采纳</Button>
+            <Button variant="subtle" leftSection={<IconArrowLeft size={16}/>} onClick={()=>goTo(2)}>返回修改目标</Button>
+            <Button rightSection={<IconArrowRight size={16}/>} onClick={openRecommendation}
+              disabled={!!busy} data-testid="candidate-next-todo">查看完整推荐稿</Button>
           </Group>
         </>}
 
         {step===4&&report&&<>
-          <StepTitle code="05" title="选择你真正认可的优化建议">报告不代写整篇简历。只勾选你认为有用且符合事实的改进项，再生成个人待办清单。</StepTitle>
-          <Panel title="优化建议清单" extra={<Status text={selected.length+' / '+suggestions.length+' 已勾选'} color="indigo"/>}>
+          <StepTitle code="05" title="你的完整推荐稿">
+            先得到一份可直接编辑的简历，再决定是否补充细节。自动生成的表述都是建议，不会未经确认替换原稿。
+          </StepTitle>
+          {recommendation&&<Panel title="推荐稿 · 可直接采用并导出"
+            testId="candidate-recommendation-panel"
+            extra={<Status text={recommendation.mode==='ai'?'AI 整体加强':recommendation.mode==='local'?'本地已整理':'原稿回退'} color="teal"/>}>
+            <Text size="sm" c="dimmed" mb="md" data-testid="recommendation-notice">
+              {recommendation.notice||'已从当前校对稿整理出完整简历。'}
+            </Text>
+            <RecommendedResumePreview draft={recommendation.draft}/>
+            <Group wrap="wrap" mt="sm">
+              <Button leftSection={<IconCircleCheck size={17}/>} size="md"
+                onClick={()=>openClassicWithReviewedDraft('recommended')}
+                disabled={!!busy}
+                data-testid="candidate-accept-recommend">
+                采用推荐稿并编辑／导出
+              </Button>
+              <Button variant="default" onClick={()=>openClassicWithReviewedDraft('original')}
+                disabled={!!busy} data-testid="candidate-open-original">
+                使用校对原稿
+              </Button>
+            </Group>
+            <details className="recommended-details" data-testid="candidate-recommend-edit">
+              <summary>需要调整？展开直接编辑推荐稿</summary>
+              <Text size="xs" c="dimmed" my="md">
+                修改只发生在推荐稿上。原始校对版和原文仍保留，可随时选择不采用。
+              </Text>
+              <ResumeEditor resume={recommendation.draft} update={changeRecommended}
+                updateExperience={(i,f,v)=>changeRecommendedEntry('experience',i,f,v)}
+                updateEntry={changeRecommendedEntry} addEntry={addRecommendedEntry}
+                removeEntry={removeRecommendedEntry}/>
+            </details>
+            <details className="recommended-details" data-testid="candidate-recommend-explained">
+              <summary>本次优化了什么 · 还有什么可选补充</summary>
+              {(recommendation.improvements||[]).length>0
+                ? <ul>{recommendation.improvements.map((reason,i)=><li key={i}>{reason}</li>)}</ul>
+                : <Text size="sm" c="dimmed">未作额外的语义加强；可直接保留现有表达。</Text>}
+              {(recommendation.questions||[]).length>0&&<div>
+                <Text fw={700} size="sm" mt="md">可选补充（不回答也能导出）</Text>
+                <ul>{recommendation.questions.slice(0,3).map((item,i)=>
+                  <li key={item.id||i}>{item.question}</li>)}</ul>
+              </div>}
+            </details>
+            <div className="recommended-details">
+              <Text fw={700} size="sm">可选 · 让 AI 进一步加强整份简历</Text>
+              <Text size="xs" c="dimmed" mb="sm">
+                当前推荐稿已可使用。只有你主动授权并点击后，才会将本次简历与岗位发送给 DeepSeek。
+                AI 生成的是待采用的草稿，不是经第三方证明的履历事实。
+              </Text>
+              <Checkbox checked={recommendConsent} onChange={e=>setRecommendConsent(e.currentTarget.checked)}
+                label="同意仅在点击下方按钮时向 DeepSeek 发送本次简历材料"
+                data-testid="candidate-recommend-consent"/>
+              <TextInput mt="sm" type="password" autoComplete="off"
+                label="DeepSeek API Key（可留空使用本机配置）"
+                value={aiKey} onChange={e=>setAiKey(e.currentTarget.value)}
+                data-testid="candidate-recommend-key"/>
+              <Button mt="sm" variant="light" disabled={!recommendConsent||!!busy}
+                leftSection={<IconSparkles size={17}/>} onClick={regenerateWithAi}
+                data-testid="candidate-recommend-ai">AI 生成另一版完整推荐稿</Button>
+            </div>
+          </Panel>}
+          <details className="recommended-details" data-testid="candidate-more-advice">
+            <summary>可选：查看进一步优化建议与核查清单（不影响成稿）</summary>
+          <Panel title="可选 · 定位和修改建议"
+            extra={<Status text="可跳过" color="gray"/>}
+            testId="candidate-advice-panel">
             {suggestions.map(s=><div className="diag-advice" key={s.id} data-testid={'advice-'+s.id}>
               <Checkbox checked={selected.includes(s.id)} label={<Group gap="sm"><Status text={s.priority+'优先级'} color={s.priority==='高'?'orange':s.priority==='中'?'blue':'gray'}/><Status text={s.assessment||'需要修正'} color={s.assessment==='可选深化'?'gray':'orange'}/><strong>{s.title}</strong></Group>}
                 onChange={e=>checkboxSetter(selected,setSelected,s.id,e.currentTarget.checked)}/>
@@ -725,9 +884,9 @@ export default function CandidateDiagnosisApp() {
               建议不会自动改写简历；进入后需要再次核对内容，才能导出 Word/PDF。
               数据仅在当前浏览器标签页中一次性交接，不发送给外部 AI。
             </Alert>
-            <Button mt="md" variant="light" leftSection={<IconFileText size={17}/>}
-              onClick={openClassicWithReviewedDraft} disabled={!!busy}
-              data-testid="candidate-open-classic">继续编辑并导出岗位简历</Button>
+            <Button mt="md" variant="subtle" leftSection={<IconFileText size={17}/>}
+              onClick={()=>openClassicWithReviewedDraft('original')} disabled={!!busy}
+              data-testid="candidate-open-classic">使用校对原稿进入编辑器</Button>
           </Panel>
           <Panel title="面试核查清单" extra={<Status text={selectedQuestions.length+' / '+questionList.length+' 已勾选'} color="gray"/>}>
             {(questionList.length===0)&&<Text size="sm" c="dimmed">当前没有规则触发的高/中风险核查问题。</Text>}
@@ -743,6 +902,7 @@ export default function CandidateDiagnosisApp() {
               <Button size="sm" variant="light"
               disabled={!selectedQuestions.length||!!busy} onClick={()=>exportSelected('questions','pdf')}>导出核查问题 PDF</Button></Group>
           </Panel>
+          </details>
           <Group justify="space-between" mt="xl"><Button variant="subtle" leftSection={<IconArrowLeft size={16}/>} onClick={()=>setStep(3)}>返回诊断报告</Button>
             <Button variant="light" leftSection={<IconRefresh size={15}/>} onClick={()=>setStep(1)}>重新校对简历</Button></Group>
         </>}

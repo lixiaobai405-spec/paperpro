@@ -20,9 +20,10 @@ from app.parser import extract_file
 from .adapter import convert_resume, from_text
 from .engine import run_diagnosis
 from .narrative import add_ai_explanations, propose_resume_structure
+from .recommendation import generate_recommended_draft
 from .pdf_layout import augment_missing_fields_from_pdf
 from .work_relation import propose_existing_work_relations
-from .schema import DiagnosisRequest, PasteRequest, SelectionRequest, StructureRequest
+from .schema import DiagnosisRequest, PasteRequest, SelectionRequest, StructureRequest, RecommendationRequest
 from .scoring import load_rules
 
 router = APIRouter(prefix="/api/diagnosis")
@@ -124,6 +125,20 @@ def structure_loose_resume(request: StructureRequest):
         raise HTTPException(
             status_code=502, detail="AI 服务暂时不可用，可直接继续人工校对和诊断"
         ) from exc
+
+
+@router.post("/recommend")
+def recommend_complete_resume(request: RecommendationRequest):
+    # A model call can only happen after separate, positive consent.
+    if request.use_ai and not request.ai_consent:
+        raise HTTPException(
+            status_code=422, detail="请先同意向外部 AI 发送简历材料"
+        )
+    return generate_recommended_draft(
+        request.resume, request.target,
+        use_ai=request.use_ai, ai_consent=request.ai_consent,
+        ai_provider=request.ai_provider, api_key=request.api_key,
+    )
 
 
 @router.post("/report")

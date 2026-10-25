@@ -116,6 +116,15 @@ class PasteRequest(BaseModel):
     text: str = Field(min_length=1, max_length=100_000)
 
 
+class RecommendationRequest(BaseModel):
+    resume: CandidateResume
+    target: Target
+    use_ai: bool = False
+    ai_consent: bool = False
+    ai_provider: Literal["deepseek", "configured"] = "deepseek"
+    api_key: str | None = Field(default=None, repr=False, exclude=True)
+
+
 class StructureRequest(BaseModel):
     resume: CandidateResume
     ai_consent: bool = False

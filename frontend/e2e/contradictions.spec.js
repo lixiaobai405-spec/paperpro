@@ -20,6 +20,7 @@ test('two opposing current resume statements are visible, reviewable and exporte
   await expect(conflicting.getByTestId('verification-opposing-claim')).toContainText('Python：不会');
 
   await page.getByTestId('candidate-next-todo').click();
+  await page.getByTestId('candidate-more-advice').locator('summary').click();
   const advice = page.locator('[data-testid^="advice-advice-claim-conflict-"]');
   await expect(advice).toHaveCount(1);
   await expect(advice).toContainText('可能不一致');
