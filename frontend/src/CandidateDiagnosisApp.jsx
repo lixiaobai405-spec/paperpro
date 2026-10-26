@@ -116,7 +116,7 @@ function Match({ data }) {
     <div className="diag-table-wrap">
       <table className="diag-table" data-testid="requirements-table">
         <thead><tr><th>关键要求</th><th>匹配状态</th><th>系数</th><th>有效权重</th><th>原文证据</th></tr></thead>
-        <tbody>{data.requirements.map(item => <tr key={item.id}>
+        <tbody>{data.requirements.filter(item => item.status !== '岗位未要求').map(item => <tr key={item.id}>
           <td><strong>{item.label}</strong><Text size="xs" c="dimmed">{item.reason}</Text></td>
           <td><Status text={item.status} color={item.status === '已体现' ? 'teal' : item.status === '简历未体现' ? 'orange' : 'gray'}/></td>
           <td>{(item.coefficient * 100).toFixed(0)}%</td>
