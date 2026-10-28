@@ -365,10 +365,19 @@ def run_diagnosis(
         except Exception:
             # Do not leak personal input or system exceptions into report.
             sections[key]={"status":"error","conclusion":"此维度未能生成，请检查输入后重试"}
+    completed_modules=[
+        name for name, section in sections.items() if section.get("status") == "ok"
+    ]
+    report_status=(
+        "complete" if len(completed_modules)==len(RUNNERS) else
+        "partial" if completed_modules else "unavailable"
+    )
     verification=sections.get("verification",{})
-    questions=verification.get("questions",[])
-    # Suggestions are independent of one section's failure.
-    suggestions=_advice(resume,target,sections)
+    questions=(verification.get("questions",[])
+               if verification.get("status")=="ok" else [])
+    # No successful module means there is no validated basis for suggestions.
+    # A partial report remains usable, but its unexecuted scope is explicit.
+    suggestions=_advice(resume,target,sections) if completed_modules else []
     source=resume.model_dump(exclude={"source_text"})
     return {
         "meta":{
@@ -380,6 +389,8 @@ def run_diagnosis(
             "source_sha256":resume.source_sha256,
             "reviewed_draft_sha256":sha256(json.dumps(source,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),
             "score_is_hiring_probability":False,
+            "report_status":report_status,
+            "completed_modules":completed_modules,
             "disclaimer":"输出供候选人自查，不是实际企业录用概率；缺少真实 HR 标注数据，预测效度未验证。",
         },
         "target":target.model_dump(),

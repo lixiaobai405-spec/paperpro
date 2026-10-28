@@ -21,9 +21,10 @@ from .adapter import convert_resume, from_text
 from .engine import run_diagnosis
 from .narrative import add_ai_explanations, propose_resume_structure
 from .recommendation import generate_recommended_draft
+from .report_export import render_diagnosis_report, OversizedReport
 from .pdf_layout import augment_missing_fields_from_pdf
 from .work_relation import propose_existing_work_relations
-from .schema import DiagnosisRequest, PasteRequest, SelectionRequest, StructureRequest, RecommendationRequest
+from .schema import DiagnosisRequest, PasteRequest, SelectionRequest, StructureRequest, RecommendationRequest, ReportExportRequest
 from .scoring import load_rules
 
 router = APIRouter(prefix="/api/diagnosis")
@@ -165,6 +166,52 @@ def generate_report(request: DiagnosisRequest):
     except (ValueError, OSError, KeyError) as exc:
         # No user data or provider secrets in responses.
         raise HTTPException(status_code=422,detail="诊断参数或规则表无效，请检查日期与配置") from exc
+
+
+@router.post("/report/export")
+def export_diagnosis_report(payload: ReportExportRequest):
+    """Export one frozen browser report snapshot, including partial statuses.
+
+    This stateless demo has no authenticated task owner or server-side export
+    ledger; the endpoint does not represent a verified historical record.
+    """
+    try:
+        body, completed = render_diagnosis_report(payload.report)
+    except OversizedReport as exc:
+        raise HTTPException(
+            status_code=413, detail="诊断报告过长，请重新生成精简报告"
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail="诊断报告版本或有效模块缺失，请重新生成报告"
+        ) from exc
+
+    if payload.format == "txt":
+        content = body.encode("utf-8-sig")
+        media = "text/plain; charset=utf-8"
+    else:
+        report_doc = Resume(
+            name="PaperPro 五维诊断报告",
+            summary="本报告供候选人自查，已关闭或失败的模块不代表完成核查。",
+            additional=[line for line in body.splitlines()[1:] if line.strip()],
+        )
+        try:
+            word = make_docx(report_doc)
+            content = make_pdf(report_doc, word)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail="诊断报告 PDF 生成失败，请先下载 TXT"
+            ) from exc
+        media = "application/pdf"
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=media,
+        headers={
+            "Content-Disposition": f'attachment; filename="paperpro_diagnosis_report.{payload.format}"',
+            "Cache-Control": "no-store",
+            "X-Report-Coverage": f"{completed}/5",
+        },
+    )
 
 
 def _selected_items(payload: SelectionRequest) -> list[dict]:

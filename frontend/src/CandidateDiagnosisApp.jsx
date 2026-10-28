@@ -285,7 +285,7 @@ export default function CandidateDiagnosisApp() {
     // The inputs bind an in-flight diagnosis: changing any input revokes the
     // older response, including the case where report generation is pending.
     requestId.current += 1;
-    setBusy(previous => ['report','structure','recommend','recommendAi'].includes(previous) ? '' : previous);
+    setBusy(previous => ['report','structure','recommend','recommendAi','reportExport'].includes(previous) ? '' : previous);
     setStructureSuggestion(null);
     setRecommendation(null);setRecommendConsent(false);
     setReport(null);setSelected([]);setSelectedQuestions([]);
@@ -400,7 +400,7 @@ export default function CandidateDiagnosisApp() {
     setNavNotice('已采用 AI 整理草稿。请核对字段与原文后继续；没有被删除的未分类原文仍在表单中。');
   }
   async function generate(){
-    if(!resume||(!target.role.trim()&&!target.company.trim())||busy)return;
+    if(!resume||(!target.role.trim()&&!target.company.trim())||!enabled.length||busy)return;
     const token=++requestId.current;
     setBusy('report');setError('');setNavNotice('');
     try{
@@ -488,6 +488,35 @@ export default function CandidateDiagnosisApp() {
       draft:{...previous.draft,[group]:(previous.draft[group]||[]).filter((_,i)=>i!==index)}
     }));
   }
+  async function exportReport(format){
+    if(!report || busy)return;
+    const snapshot=structuredClone(report);
+    const token=++requestId.current;
+    setBusy('reportExport');setError('');
+    try{
+      const response=await fetch('/api/diagnosis/report/export',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({report:snapshot,format}),
+      });
+      if(token!==requestId.current)return;
+      if(!response.ok){
+        const info=await response.json().catch(()=>({}));
+        throw new Error(info.detail||'诊断报告导出失败，请重试');
+      }
+      const blob=await response.blob();
+      if(token!==requestId.current)return;
+      const url=URL.createObjectURL(blob);
+      const anchor=document.createElement('a');
+      anchor.href=url;
+      anchor.download='paperpro_diagnosis_report.'+format;
+      document.body.append(anchor);anchor.click();anchor.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);
+    }catch(e){
+      if(token===requestId.current)setError(e.message);
+    }finally{
+      if(token===requestId.current)setBusy('');
+    }
+  }
   async function exportSelected(kind,format){
     const choices=kind==='todo'?selected:selectedQuestions;
     if(!choices.length)return;
@@ -524,7 +553,7 @@ export default function CandidateDiagnosisApp() {
     if(newStep>step)return;
     if(newStep===3&&!report)return;
     if(newStep===4&&!report)return;
-    if(['report','structure','recommend','recommendAi'].includes(busy) && newStep<step){
+    if(['report','structure','recommend','recommendAi','reportExport'].includes(busy) && newStep<step){
       requestId.current += 1;
       setBusy('');
     }
@@ -536,6 +565,7 @@ export default function CandidateDiagnosisApp() {
   const readyTarget=!!(target.role.trim()||target.company.trim());
   const questionList=report?.interview_questions||[];
   const suggestions=report?.suggestions||[];
+  const completedModules=SECTIONS.filter(([id])=>report?.dimensions?.[id]?.status==='ok').length;
 
   return <div className="diag-root" data-testid="candidate-app">
     <aside className="diag-sidebar">
@@ -568,7 +598,7 @@ export default function CandidateDiagnosisApp() {
         {error&&<Alert mb="lg" color="red" withCloseButton onClose={()=>setError('')} title="操作未完成">{error}</Alert>}
         {navNotice&&<Alert mb="lg" color="orange" withCloseButton onClose={()=>setNavNotice('')}>{navNotice}</Alert>}
         {busy&&<Paper p="md" className="diag-loading" mb="lg">
-          <Group gap="sm"><Loader size="sm"/><div><Text fw={700} size="sm">{busy==='parse'?'正在识别简历文字与结构':busy==='structure'?'正在生成可选的 AI 整理草稿':busy==='report'?'正在核算岗位要求与五维证据':['recommend','recommendAi'].includes(busy)?'正在整理完整推荐稿':'正在导出已勾选清单'}</Text>
+          <Group gap="sm"><Loader size="sm"/><div><Text fw={700} size="sm">{busy==='parse'?'正在识别简历文字与结构':busy==='structure'?'正在生成可选的 AI 整理草稿':busy==='report'?'正在核算岗位要求与五维证据':['recommend','recommendAi'].includes(busy)?'正在整理完整推荐稿':busy==='reportExport'?'正在导出当前诊断报告':'正在导出已勾选清单'}</Text>
           <Text size="xs" c="dimmed">{elapsed} 秒 · {elapsed>=10?'已超过 10 秒，仍在处理，请稍候；原文件不会更改。':'请稍候，结果生成后自动进入下一步。'}</Text></div></Group>
         </Paper>}
 
@@ -720,6 +750,9 @@ export default function CandidateDiagnosisApp() {
                   invalidate();
                 }}/>)}
             </SimpleGrid>
+            {enabled.length===0&&<Text mt="sm" size="xs" c="orange" data-testid="candidate-no-dimensions">
+              至少保留一项诊断模块；全部关闭时不能生成有效诊断。仍可返回编辑简历。
+            </Text>}
             <Alert variant="light" color="blue" mt="lg" icon={<IconInfoCircle size={17}/>}>
               匹配度是“简历证据覆盖度”，不是 HR 录取概率。心理测量与经济学多准则权重尚需真实标注样本检验；本报告会明确展示规则版本。
             </Alert>
@@ -739,7 +772,7 @@ export default function CandidateDiagnosisApp() {
           </Panel>
           <Group justify="space-between" mt="xl">
             <Button variant="subtle" leftSection={<IconArrowLeft size={16}/>} onClick={()=>setStep(1)}>返回修改简历</Button>
-            <Button onClick={generate} disabled={!readyTarget||!!busy||(aiEnabled&&!aiConsent)}
+            <Button onClick={generate} disabled={!readyTarget||!enabled.length||!!busy||(aiEnabled&&!aiConsent)}
               rightSection={<IconSparkles size={17}/>} data-testid="candidate-generate">
               生成五维诊断报告
             </Button>
@@ -747,9 +780,17 @@ export default function CandidateDiagnosisApp() {
         </>}
 
         {step===3&&report&&<>
-          <StepTitle code="04" title="诊断已完成 · 下一步拿到整份简历">
-            报告用于解释和参考，不必先处理所有问题。可以直接生成一份完整、可编辑的推荐稿。
+          <StepTitle code="04" title={completedModules>0?'诊断已完成 · 下一步拿到整份简历':'有效诊断不足 · 可继续整理简历'}>
+            {completedModules>0
+              ? '报告用于解释和参考，不必先处理所有问题。可以直接生成一份完整、可编辑的推荐稿。'
+              : '当前没有模块产生有效结论；请检查失败原因或返回修改诊断范围。可以继续整理已有简历。'}
           </StepTitle>
+          {completedModules<SECTIONS.length&&<Alert color="orange" variant="light" mb="lg"
+            data-testid="candidate-partial-report">
+            {completedModules
+              ? `这是部分报告：${completedModules}/${SECTIONS.length} 个模块完成，其余模块已关闭或失败；对应结论不视为已验证。`
+              : '五个模块均未产生有效结论。本次不生成诊断优化建议，也不允许导出空报告。'}
+          </Alert>}
           <Paper withBorder p="lg" radius="lg" mb="lg" data-testid="candidate-recommend-primary">
             <Group justify="space-between" gap="md" wrap="wrap">
               <div>
@@ -764,6 +805,22 @@ export default function CandidateDiagnosisApp() {
           </Paper>
           <div className="diag-report-meta"><div><strong>岗位：{target.role||'未提供'} </strong> / 公司：{target.company||'未提供'}</div>
             <div>生成时间 {report.meta.generated_at} · 规则版本 {report.meta.rules_version}</div></div>
+          <Paper withBorder radius="lg" p="md" mb="lg" data-testid="candidate-full-report-export">
+            <Group justify="space-between" gap="md" wrap="wrap">
+              <div>
+                <Text fw={700} size="sm">保存这份五维诊断报告</Text>
+                <Text c="dimmed" size="xs">按当前版本导出；关闭、失败或未覆盖的模块会明确注明，不视为已完成。</Text>
+              </div>
+              <Group gap="sm" wrap="wrap">
+                <Button size="sm" variant="light" leftSection={<IconDownload size={16}/>}
+                  onClick={()=>exportReport('pdf')} disabled={!!busy||completedModules===0}
+                  data-testid="candidate-export-report-pdf">诊断报告 PDF</Button>
+                <Button size="sm" variant="default" leftSection={<IconDownload size={16}/>}
+                  onClick={()=>exportReport('txt')} disabled={!!busy||completedModules===0}
+                  data-testid="candidate-export-report-txt">诊断报告 TXT</Button>
+              </Group>
+            </Group>
+          </Paper>
           {report.meta.ai_narrative&&<Alert mb="lg" color={report.meta.ai_narrative==='completed'?'teal':'orange'} variant="light">
             {report.meta.ai_notice}
           </Alert>}
