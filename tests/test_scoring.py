@@ -268,7 +268,13 @@ def test_disabled_dimension_does_not_cascade():
     assert report["dimensions"]["match"]["status"]=="ok"
     assert report["dimensions"]["experience"]["status"]=="disabled"
     assert report["dimensions"]["verification"]["status"]=="ok"
-    assert len(report["suggestions"])>=8
+    assert report["meta"]["report_status"]=="partial"
+    assert report["suggestions"]
+    # Unexecuted dimensions must not be represented by invented advice.
+    assert all(item["source_module"] in {"match","verification"}
+               for item in report["suggestions"])
+    assert not any(item["id"] in {"advice-03", "advice-04", "advice-08", "advice-09"}
+                   for item in report["suggestions"])
 
 
 def test_potential_claims_are_evidence_linked_or_explicit_unknown():

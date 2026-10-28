@@ -255,8 +255,24 @@ def _advice(resume: CandidateResume, target: Target, dimensions: dict) -> list[d
          "结合真实经历说明岗位兴趣，企业信息只能来自用户提供的JD。",
          "希望在[目标岗位真实工作内容]中应用已有的[具体经验]。", "中"),
     ]
+    # Each proposed edit must depend on a successfully executed dimension.
+    # Other dimensions may be disabled or failed; their advisory templates
+    # are not evidence of having been checked.
+    source_for_template={
+        1:"match", 2:"match", 3:"motivation", 4:"experience",
+        5:"match", 6:"verification", 7:"verification",
+        8:"potential", 9:"motivation",
+    }
+    partial=any(section.get("status")!="ok" for section in dimensions.values())
     advice=[]
     for i,(title,group,problem,action,example,priority) in enumerate(templates,1):
+        owner=source_for_template[i]
+        if dimensions.get(owner,{}).get("status")!="ok":
+            continue
+        if partial and ((i==6 and not metric_issues) or (i==7 and not timeline_issues)):
+            # In incomplete reports, do not invent a suggestion to fill a
+            # template slot when the responsible module found no such issue.
+            continue
         assessment="需要修正"
         ref=first([group,"summary"] if group != "skills" else ["skills.0","summary"])
         if i==1 and resume.title.strip() and "function" not in weak_ids:
@@ -310,6 +326,7 @@ def _advice(resume: CandidateResume, target: Target, dimensions: dict) -> list[d
             problem="已出现目标岗位的针对性表达；可进一步核实与岗位描述的具体联系。"
         advice.append({
             "id":f"advice-{i:02d}","title":title,
+            "source_module":owner,
             "assessment":assessment,
             "priority":priority,"location":ref["path"],"original":ref["original"],
             "problem":problem,"action":action,"example":example,
@@ -322,6 +339,7 @@ def _advice(resume: CandidateResume, target: Target, dimensions: dict) -> list[d
             continue
         advice.append({
             "id":"advice-"+issue["id"],"issue_id":issue["id"],
+            "source_module":"verification",
             "conflict_kind":issue["conflict_kind"],
             "title":f"可选核对：{issue['subject']} 的表述可能不一致",
             "assessment":"可选深化","priority":"中",

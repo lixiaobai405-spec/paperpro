@@ -22,6 +22,7 @@ from .engine import run_diagnosis
 from .narrative import add_ai_explanations, propose_resume_structure
 from .recommendation import generate_recommended_draft
 from .report_export import render_diagnosis_report, OversizedReport
+from .report_integrity import issue_report, is_issued_report
 from .pdf_layout import augment_missing_fields_from_pdf
 from .work_relation import propose_existing_work_relations
 from .schema import DiagnosisRequest, PasteRequest, SelectionRequest, StructureRequest, RecommendationRequest, ReportExportRequest
@@ -162,7 +163,7 @@ def generate_report(request: DiagnosisRequest):
                 # Do not let one optional provider destroy deterministic output.
                 report["meta"]["ai_narrative"]="unavailable"
                 report["meta"]["ai_notice"]="AI 辅助解读未完成；五维规则报告已保留。请检查服务商配置。"
-        return report
+        return issue_report(report)
     except (ValueError, OSError, KeyError) as exc:
         # No user data or provider secrets in responses.
         raise HTTPException(status_code=422,detail="诊断参数或规则表无效，请检查日期与配置") from exc
@@ -175,6 +176,11 @@ def export_diagnosis_report(payload: ReportExportRequest):
     This stateless demo has no authenticated task owner or server-side export
     ledger; the endpoint does not represent a verified historical record.
     """
+    if not is_issued_report(payload.report):
+        raise HTTPException(
+            status_code=422,
+            detail="报告来源或版本已失效，请重新生成诊断后再导出",
+        )
     try:
         body, completed = render_diagnosis_report(payload.report)
     except OversizedReport as exc:

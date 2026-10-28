@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.diagnosis.schema import CareerEntry, CandidateResume, Target
 from app.diagnosis.engine import run_diagnosis
+from app.diagnosis.report_integrity import issue_report
 from app.main import app
 
 client = TestClient(app, raise_server_exceptions=False)
@@ -29,7 +30,7 @@ def _report(*, enabled=None):
         )],
     )
     target = Target(role="后端开发工程师", job_description="熟悉 Python、SQL；2年开发经验")
-    return run_diagnosis(resume, target, enabled_sections=enabled, as_of="2026-10-28")
+    return issue_report(run_diagnosis(resume, target, enabled_sections=enabled, as_of="2026-10-28"))
 
 
 def _export(report, file_format="txt"):
