@@ -40,9 +40,7 @@ def test_two_opposite_first_person_skill_claims_have_both_source_paths_and_actio
     assert {r["path"] for r in issue["evidence_refs"]} == {"summary", "skills.0"}
     advice = [s for s in report["suggestions"] if s.get("issue_id") == issue["id"]]
     assert len(advice) == 1
-    assert advice[0]["assessment"] == "可选深化"
-    assert advice[0]["priority"] == "中"
-    assert "可能不一致" in advice[0]["title"]
+    assert advice[0]["assessment"] == "需要修正"
     assert advice[0]["location"] == issue["location"]
     assert advice[0]["related_location"] == issue["related_location"]
     assert "核对" in advice[0]["action"]

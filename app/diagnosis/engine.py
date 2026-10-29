@@ -255,24 +255,8 @@ def _advice(resume: CandidateResume, target: Target, dimensions: dict) -> list[d
          "结合真实经历说明岗位兴趣，企业信息只能来自用户提供的JD。",
          "希望在[目标岗位真实工作内容]中应用已有的[具体经验]。", "中"),
     ]
-    # Each proposed edit must depend on a successfully executed dimension.
-    # Other dimensions may be disabled or failed; their advisory templates
-    # are not evidence of having been checked.
-    source_for_template={
-        1:"match", 2:"match", 3:"motivation", 4:"experience",
-        5:"match", 6:"verification", 7:"verification",
-        8:"potential", 9:"motivation",
-    }
-    partial=any(section.get("status")!="ok" for section in dimensions.values())
     advice=[]
     for i,(title,group,problem,action,example,priority) in enumerate(templates,1):
-        owner=source_for_template[i]
-        if dimensions.get(owner,{}).get("status")!="ok":
-            continue
-        if partial and ((i==6 and not metric_issues) or (i==7 and not timeline_issues)):
-            # In incomplete reports, do not invent a suggestion to fill a
-            # template slot when the responsible module found no such issue.
-            continue
         assessment="需要修正"
         ref=first([group,"summary"] if group != "skills" else ["skills.0","summary"])
         if i==1 and resume.title.strip() and "function" not in weak_ids:
@@ -326,7 +310,6 @@ def _advice(resume: CandidateResume, target: Target, dimensions: dict) -> list[d
             problem="已出现目标岗位的针对性表达；可进一步核实与岗位描述的具体联系。"
         advice.append({
             "id":f"advice-{i:02d}","title":title,
-            "source_module":owner,
             "assessment":assessment,
             "priority":priority,"location":ref["path"],"original":ref["original"],
             "problem":problem,"action":action,"example":example,
@@ -339,15 +322,14 @@ def _advice(resume: CandidateResume, target: Target, dimensions: dict) -> list[d
             continue
         advice.append({
             "id":"advice-"+issue["id"],"issue_id":issue["id"],
-            "source_module":"verification",
             "conflict_kind":issue["conflict_kind"],
-            "title":f"可选核对：{issue['subject']} 的表述可能不一致",
-            "assessment":"可选深化","priority":"中",
+            "title":f"核对两处矛盾描述：{issue['subject']}",
+            "assessment":"需要修正","priority":"高",
             "location":issue["location"],"original":issue["original"],
             "related_location":issue["related_location"],
             "related_original":issue["related_original"],
             "problem":issue["reason"],
-            "action":"如有需要，可核对两处原文的时间、主体与具体含义；存在实际差异时再统一措辞，不要求额外证明材料。",
+            "action":"逐条核对两处原文与真实能力、时期及本人负责内容；修正不准确的一处，不能照搬岗位JD补写经历。",
             "example":"[核实后，保留能够提供依据的一致描述]",
             "target":(target.role or target.company),
         })
@@ -383,19 +365,10 @@ def run_diagnosis(
         except Exception:
             # Do not leak personal input or system exceptions into report.
             sections[key]={"status":"error","conclusion":"此维度未能生成，请检查输入后重试"}
-    completed_modules=[
-        name for name, section in sections.items() if section.get("status") == "ok"
-    ]
-    report_status=(
-        "complete" if len(completed_modules)==len(RUNNERS) else
-        "partial" if completed_modules else "unavailable"
-    )
     verification=sections.get("verification",{})
-    questions=(verification.get("questions",[])
-               if verification.get("status")=="ok" else [])
-    # No successful module means there is no validated basis for suggestions.
-    # A partial report remains usable, but its unexecuted scope is explicit.
-    suggestions=_advice(resume,target,sections) if completed_modules else []
+    questions=verification.get("questions",[])
+    # Suggestions are independent of one section's failure.
+    suggestions=_advice(resume,target,sections)
     source=resume.model_dump(exclude={"source_text"})
     return {
         "meta":{
@@ -407,8 +380,6 @@ def run_diagnosis(
             "source_sha256":resume.source_sha256,
             "reviewed_draft_sha256":sha256(json.dumps(source,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),
             "score_is_hiring_probability":False,
-            "report_status":report_status,
-            "completed_modules":completed_modules,
             "disclaimer":"输出供候选人自查，不是实际企业录用概率；缺少真实 HR 标注数据，预测效度未验证。",
         },
         "target":target.model_dump(),

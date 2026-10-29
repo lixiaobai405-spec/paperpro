@@ -158,9 +158,7 @@ button, input, textarea { font-family: inherit; }
   background: repeating-linear-gradient(45deg, #edf1f7, #edf1f7 7px, #eff3f9 7px, #eff3f9 14px);
 }
 .paper-sheet {
-  /* Preserve the A4 minimum while allowing longer content to grow the sheet.
-     A pixel min-height overrides the aspect-ratio box's content-based minimum. */
-  min-height: auto; aspect-ratio: 210 / 297; padding: 8.7% 9% 10%;
+  min-height: 660px; aspect-ratio: 210 / 297; padding: 8.7% 9% 10%;
   background: #fff; color: #44546b; width: 100%; overflow-wrap: anywhere;
   box-shadow: 0 9px 28px #1c2e4924, 0 1px 3px #2b3e6317;
   border-radius: 2px;
@@ -218,6 +216,7 @@ button, input, textarea { font-family: inherit; }
 .mantine-Button-root { font-weight: 680; }
 @media (max-width: 1110px) {
   .studio-grid { grid-template-columns: minmax(340px, 1fr) minmax(340px, 1fr); gap: 17px; }
+  .paper-sheet { min-height: 580px; }
   .paper-section { margin-top: 11px; }
   .paper-section h3 { font-size: 11px; }
 }
@@ -226,7 +225,7 @@ button, input, textarea { font-family: inherit; }
   .studio-right { order: 1; position: static; }
   .preview-sticky { position: static; }
   .preview-canvas { padding: 16px; }
-  .paper-sheet { margin: auto; max-width: 570px; }
+  .paper-sheet { margin: auto; max-width: 570px; min-height: 685px; }
   .hero-decoration { display: none; }
 }
 @media (max-width: 600px) {
@@ -242,6 +241,7 @@ button, input, textarea { font-family: inherit; }
   .step-connector { width: 15px; margin: 0 5px; }
   .preview-toolbar { padding: 0 2px; }
   .preview-canvas { padding: 10px; }
+  .paper-sheet { min-height: 470px; }
   .paper-head h1 { font-size: 20px; }
   .paper-section { margin-top: 9px; }
   .paper-section h3 { font-size: 11px; }

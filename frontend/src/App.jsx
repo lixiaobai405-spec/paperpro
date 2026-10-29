@@ -701,8 +701,6 @@ export default function App() {
                 {pendingAi.changes.map((change, i) => <div key={i} className="change-item">
                   <Text size="xs" fw={700} c="indigo" mb={5}>{change.field}</Text>
                   <Text size="xs" c="dimmed">原文：{change.before}</Text>
-                  {(change.review_flags||[]).map((note,index)=><Text key={index} size="xs" c="orange"
-                    data-testid="ai-review-warning">需核对：{note}</Text>)}
                   <Checkbox mt={8} checked={!!pendingAi.selected[i]}
                     onChange={(e) => {
                       const checked = e.currentTarget.checked;
@@ -735,14 +733,10 @@ export default function App() {
               <div className="section-kicker">STEP 03 / EXPORT</div>
               <Title order={3} className="panel-title">最后一步：审核并导出</Title>
               <Text c="dimmed" size="sm" mt={4}>使用固定的 PaperPro Classic A4 模板</Text>
-              {!resume.name?.trim()&&<Alert color="blue" variant="light" mt="sm">
-                姓名尚未填写；可以先导出简历草稿，正式投递前再补充。
-              </Alert>}
               <div className="review-consent">
                 <Checkbox checked={reviewed} disabled={!!pendingAi}
                   onChange={(e) => setReviewed(e.currentTarget.checked)}
-                  label="我已核对当前填写的信息和所采纳的改写建议（空缺项可以稍后补充）"
-                  data-testid="review-checkbox"/>
+                  label="我已对照原文核实姓名、学校、公司、日期、数字及描述" data-testid="review-checkbox"/>
               </div>
               <SimpleGrid cols={2} spacing="sm" mt="md">
                 <Button variant="light" leftSection={<IconFileTypeDocx size={19}/>}

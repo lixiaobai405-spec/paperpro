@@ -121,23 +121,6 @@
 .diag-example{background:#f5f8ff;border-left:3px solid #7a94d8;border-radius:4px;padding:10px 13px;margin-top:2px;font-size:12px;color:#405984;line-height:1.7}
 .diag-example strong{font-size:11px;color:#7184a4}
 .diag-footer{border-top:1px solid #e4eaf3;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:38px;padding:19px 5px 0;color:#9aa9bb;font-size:11px}
-.recommended-paper {max-width:810px;margin:8px auto 22px;background:#fff;border:1px solid #e0e6ef;box-shadow:0 15px 38px #16305113;border-radius:8px;padding:clamp(22px,5vw,58px) clamp(20px,6vw,63px);color:#2b3b52;font-size:13px;line-height:1.75;overflow-wrap:anywhere;}
-.recommended-head{text-align:center;padding-bottom:17px;border-bottom:2px solid #344d75}
-.recommended-head h2{font-size:25px;color:#233a5c;letter-spacing:1px;margin:0 0 3px}
-.recommended-contacts{margin-top:8px;display:flex;gap:4px 15px;justify-content:center;flex-wrap:wrap;color:#63718a;font-size:11px}
-.recommended-section{margin:20px 0 0}
-.recommended-section h3{font-size:13px;color:#2e4f83;margin:0 0 11px;letter-spacing:.2px;border-bottom:1px solid #e4eaf1;padding-bottom:6px;}
-.recommended-section p{margin:0;white-space:pre-wrap;}
-.recommended-entry{margin:0 0 14px}
-.recommended-entry-head{display:flex;justify-content:space-between;flex-wrap:wrap;gap:5px 15px;color:#283c59}
-.recommended-entry-head span{color:#697a94;font-size:11px;white-space:nowrap}
-.recommended-section ul{margin:5px 0 0;padding-left:21px}
-.recommended-section li{padding:1px 0}
-.recommended-skills{display:flex;gap:6px;flex-wrap:wrap;}
-.recommended-skills span{font-size:11px;border-radius:5px;padding:2px 9px;background:#f0f4fa;color:#344e7d;}
-.recommended-details{padding:13px 15px;background:#fbfcff;border:1px solid #e4eaf3;border-radius:8px;margin-top:15px}
-.recommended-details summary{cursor:pointer;color:#385aa1;font-weight:750;font-size:13px}
-@media(max-width:600px){.recommended-paper{padding:25px 16px}.recommended-head h2{font-size:21px}}
 @media(max-width:1090px){
  .diag-root{grid-template-columns:195px minmax(0,1fr)}
  .diag-sidebar{padding:25px 9px}

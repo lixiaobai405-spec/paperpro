@@ -1,54 +1,6 @@
 import { test, expect, devices } from '@playwright/test';
 import fs from 'node:fs/promises';
 
-test('no explicit JD omits unrequested academic and optional requirements without changing computed score', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: '填入虚构演示资料' }).click();
-  await page.getByTestId('candidate-parse-text').click();
-  await page.getByTestId('candidate-next-target').click();
-  await page.getByTestId('candidate-target-role').fill('后端开发工程师');
-  const responsePromise = page.waitForResponse(response =>
-    response.url().endsWith('/api/diagnosis/report') && response.request().method() === 'POST');
-  await page.getByTestId('candidate-generate').click();
-  const response = await responsePromise;
-  expect(response.ok()).toBe(true);
-  const match = (await response.json()).dimensions.match;
-  const omitted = match.requirements.filter(row => row.status === '岗位未要求');
-  expect(omitted.some(row => row.id === 'education')).toBe(true);
-  expect(omitted.some(row => row.id === 'industry')).toBe(true);
-  expect(omitted.some(row => row.id === 'leadership')).toBe(true);
-  const table = page.getByTestId('requirements-table');
-  await expect(table.locator('tbody tr')).toHaveCount(match.requirements.length - omitted.length);
-  for (const row of omitted) {
-    await expect(table.getByRole('row', { name: new RegExp(row.label) })).toHaveCount(0);
-  }
-  await expect(table.getByText('岗位未要求')).toHaveCount(0);
-  await expect(page.getByTestId('dimension-match')).toContainText(String(match.score));
-});
-
-test('an explicit JD degree threshold keeps the academic requirement visible', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: '填入虚构演示资料' }).click();
-  await page.getByTestId('candidate-parse-text').click();
-  await page.getByTestId('candidate-next-target').click();
-  await page.getByTestId('candidate-target-role').fill('后端开发工程师');
-  await page.getByRole('textbox', { name: '目标岗位 JD（可选，但推荐）' })
-    .fill('任职要求：硕士及以上学历，熟悉 Python 和 SQL。');
-  const responsePromise = page.waitForResponse(response =>
-    response.url().endsWith('/api/diagnosis/report') && response.request().method() === 'POST');
-  await page.getByTestId('candidate-generate').click();
-  const response = await responsePromise;
-  expect(response.ok()).toBe(true);
-  const match = (await response.json()).dimensions.match;
-  const education = match.requirements.find(row => row.id === 'education');
-  expect(education.status).not.toBe('岗位未要求');
-  const table = page.getByTestId('requirements-table');
-  await expect(table.getByRole('row', { name: /学历要求/ })).toBeVisible();
-  await expect(table.getByRole('row', { name: /学历要求/ })).toContainText(education.status);
-  await expect(table.locator('tbody tr')).toHaveCount(
-    match.requirements.filter(row => row.status !== '岗位未要求').length);
-});
-
 test('candidate wizard: pasted resume, editable fields, target gate, five dimensions, selected-only downloads', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('candidate-app')).toBeVisible();
@@ -70,11 +22,9 @@ test('candidate wizard: pasted resume, editable fields, target gate, five dimens
     await expect(page.getByTestId('dimension-'+section)).toBeVisible();
   }
   const rowCount = await page.getByTestId('requirements-table').locator('tbody tr').count();
-  expect(rowCount).toBeGreaterThanOrEqual(3);
-  await expect(page.getByTestId('requirements-table').getByText('岗位未要求')).toHaveCount(0);
+  expect(rowCount).toBeGreaterThanOrEqual(6);
   await expect(page.getByText(/不是实际企业录用概率/)).toBeVisible();
   await page.getByTestId('candidate-next-todo').click();
-  await page.getByTestId('candidate-more-advice').locator('summary').click();
   await expect(page.getByTestId('advice-advice-01')).toBeVisible();
   await expect(page.getByText('可选深化', { exact: true }).first()).toBeVisible();
   const checkboxes = page.getByTestId('advice-advice-01').locator('input[type="checkbox"]');
@@ -326,7 +276,6 @@ test('selected diagnosis advice hands off reviewed facts to classic exactly once
   await page.getByLabel('目标岗位 JD（可选，但推荐）').fill('负责 Python API、SQL 数据库与 Docker 部署。');
   await page.getByTestId('candidate-generate').click();
   await page.getByTestId('candidate-next-todo').click();
-  await page.getByTestId('candidate-more-advice').locator('summary').click();
   await page.getByTestId('advice-advice-01').locator('input[type=checkbox]').check();
   let unexpectedAiRequests = 0;
   page.on('request', request => {

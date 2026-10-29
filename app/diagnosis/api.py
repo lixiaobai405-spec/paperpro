@@ -12,20 +12,16 @@ from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from starlette.concurrency import run_in_threadpool
 
 from app.exporter import make_docx, make_pdf
 from app.models import Resume
 from app.parser import extract_file
 from .adapter import convert_resume, from_text
 from .engine import run_diagnosis
-from .narrative import add_ai_explanations, propose_resume_structure
-from .recommendation import generate_recommended_draft
-from .report_export import render_diagnosis_report, OversizedReport
-from .report_integrity import issue_report, is_issued_report
+from .narrative import add_ai_explanations
 from .pdf_layout import augment_missing_fields_from_pdf
 from .work_relation import propose_existing_work_relations
-from .schema import DiagnosisRequest, PasteRequest, SelectionRequest, StructureRequest, RecommendationRequest, ReportExportRequest
+from .schema import DiagnosisRequest, PasteRequest, SelectionRequest
 from .scoring import load_rules
 
 router = APIRouter(prefix="/api/diagnosis")
@@ -60,7 +56,7 @@ async def parse_uploaded(file: UploadFile = File(...)):
         raise HTTPException(status_code=422,detail="文件为空，请重新选择")
     checksum=sha256(original).hexdigest()
     try:
-        text,warnings,method=await run_in_threadpool(extract_file,file.filename or "resume"+suffix,original)
+        text,warnings,method=extract_file(file.filename or "resume"+suffix,original)
     except (ValueError,TypeError) as exc:
         raise HTTPException(status_code=422,detail=str(exc)) from exc
     # Source SHA is of the exact uploaded bytes, not re-serialized content.
@@ -69,7 +65,7 @@ async def parse_uploaded(file: UploadFile = File(...)):
     review_hints=[]
     if suffix==".pdf" and method=="pdf-text":
         try:
-            draft,additional=await run_in_threadpool(augment_missing_fields_from_pdf,
+            draft,additional=augment_missing_fields_from_pdf(
                 draft,original,method=method,
             )
             if additional:
@@ -82,7 +78,7 @@ async def parse_uploaded(file: UploadFile = File(...)):
             # The old deterministic parser is still the source of truth.
             warnings.append("多栏辅助识别未完成；已保留常规解析结果，请人工核对。")
         try:
-            review_hints=await run_in_threadpool(propose_existing_work_relations,
+            review_hints=propose_existing_work_relations(
                 draft,original,method=method,
             )
             if review_hints:
@@ -108,41 +104,6 @@ def paste_text(data: PasteRequest):
             "resume":draft.model_dump(),"source_text":data.text,"warnings":[]}
 
 
-@router.post("/ai-structure")
-def structure_loose_resume(request: StructureRequest):
-    if not request.ai_consent:
-        raise HTTPException(status_code=422, detail="发送简历给 AI 整理前必须明确授权")
-    try:
-        return propose_resume_structure(
-            request.resume,
-            request_api_key=request.api_key,
-            provider=request.ai_provider,
-        )
-    except ValueError as exc:
-        # Do not echo untrusted provider responses or request credentials.
-        raise HTTPException(
-            status_code=422, detail="AI 整理未能生成可用草稿，请保留本地解析结果"
-        ) from exc
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=502, detail="AI 服务暂时不可用，可直接继续人工校对和诊断"
-        ) from exc
-
-
-@router.post("/recommend")
-def recommend_complete_resume(request: RecommendationRequest):
-    # A model call can only happen after separate, positive consent.
-    if request.use_ai and not request.ai_consent:
-        raise HTTPException(
-            status_code=422, detail="请先同意向外部 AI 发送简历材料"
-        )
-    return generate_recommended_draft(
-        request.resume, request.target,
-        use_ai=request.use_ai, ai_consent=request.ai_consent,
-        ai_provider=request.ai_provider, api_key=request.api_key,
-    )
-
-
 @router.post("/report")
 def generate_report(request: DiagnosisRequest):
     if request.use_ai and not request.ai_consent:
@@ -163,61 +124,10 @@ def generate_report(request: DiagnosisRequest):
                 # Do not let one optional provider destroy deterministic output.
                 report["meta"]["ai_narrative"]="unavailable"
                 report["meta"]["ai_notice"]="AI 辅助解读未完成；五维规则报告已保留。请检查服务商配置。"
-        return issue_report(report)
+        return report
     except (ValueError, OSError, KeyError) as exc:
         # No user data or provider secrets in responses.
         raise HTTPException(status_code=422,detail="诊断参数或规则表无效，请检查日期与配置") from exc
-
-
-@router.post("/report/export")
-def export_diagnosis_report(payload: ReportExportRequest):
-    """Export one frozen browser report snapshot, including partial statuses.
-
-    This stateless demo has no authenticated task owner or server-side export
-    ledger; the endpoint does not represent a verified historical record.
-    """
-    if not is_issued_report(payload.report):
-        raise HTTPException(
-            status_code=422,
-            detail="报告来源或版本已失效，请重新生成诊断后再导出",
-        )
-    try:
-        body, completed = render_diagnosis_report(payload.report)
-    except OversizedReport as exc:
-        raise HTTPException(
-            status_code=413, detail="诊断报告过长，请重新生成精简报告"
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=422, detail="诊断报告版本或有效模块缺失，请重新生成报告"
-        ) from exc
-
-    if payload.format == "txt":
-        content = body.encode("utf-8-sig")
-        media = "text/plain; charset=utf-8"
-    else:
-        report_doc = Resume(
-            name="PaperPro 五维诊断报告",
-            summary="本报告供候选人自查，已关闭或失败的模块不代表完成核查。",
-            additional=[line for line in body.splitlines()[1:] if line.strip()],
-        )
-        try:
-            word = make_docx(report_doc)
-            content = make_pdf(report_doc, word)
-        except Exception as exc:
-            raise HTTPException(
-                status_code=500, detail="诊断报告 PDF 生成失败，请先下载 TXT"
-            ) from exc
-        media = "application/pdf"
-    return StreamingResponse(
-        BytesIO(content),
-        media_type=media,
-        headers={
-            "Content-Disposition": f'attachment; filename="paperpro_diagnosis_report.{payload.format}"',
-            "Cache-Control": "no-store",
-            "X-Report-Coverage": f"{completed}/5",
-        },
-    )
 
 
 def _selected_items(payload: SelectionRequest) -> list[dict]:

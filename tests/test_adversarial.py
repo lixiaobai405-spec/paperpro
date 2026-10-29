@@ -57,21 +57,17 @@ def test_cleanup_never_mistakes_negative_values_for_bullet_prefix():
     assert cleaned.projects[0].bullets[0] == source.projects[0].bullets[0]
 
 
-def test_changed_numbers_are_reviewable_model_suggestions_not_global_422():
-    from app.enhancer import _changes
+def test_ai_cannot_reorder_or_duplicate_numeric_claims():
     source = Resume(name="Test", summary="Reduced 20% errors and 90% delays")
     rewrite = {"summary": "Reduced 90% errors and 20% delays", "experience_bullets": [], "project_bullets": []}
-    result = validate_ai_rewrite(source, rewrite)
-    assert result.summary == rewrite["summary"]
-    change = _changes(source, result)[0]
-    assert any("数字" in flag for flag in change["review_flags"])
-    assert source.summary == "Reduced 20% errors and 90% delays"
+    with pytest.raises(ValueError):
+        validate_ai_rewrite(source, rewrite)
     rewrite["summary"] = "Reduced 20% errors and 90% delays, with 20% cost reduction"
-    change = _changes(source, validate_ai_rewrite(source, rewrite))[0]
-    assert change["review_flags"]
+    with pytest.raises(ValueError):
+        validate_ai_rewrite(source, rewrite)
 
 
-def test_ai_new_technical_claim_is_flagged_for_explicit_human_review():
+def test_ai_cannot_copy_unproven_technical_skill_into_same_length_bullet():
     source = Resume(
         name="虚构候选人",
         summary="熟悉 Python 开发",
@@ -82,13 +78,10 @@ def test_ai_new_technical_claim_is_flagged_for_explicit_human_review():
         "experience_bullets": [["使用 Python 与 Kubernetes 开发 API"]],
         "project_bullets": []
     }
-    # The model may suggest this wording, but must not silently apply it.
-    from app.enhancer import _changes
-    result = validate_ai_rewrite(source, proposal)
-    changes = _changes(source, result)
-    assert len(changes) == 1
-    assert any("技术" in warning for warning in changes[0]["review_flags"])
-    assert source.experience[0].bullets[0] == "使用 Python 开发 API"
+    # The rewritten bullet has the same number of items and no numbers, but
+    # adds a technology absent from this work item's reviewed evidence.
+    with pytest.raises(ValueError, match="新增.*技术"):
+        validate_ai_rewrite(source, proposal)
 
 
 def test_ai_can_rephrase_existing_technical_skill_without_new_claim():
@@ -104,28 +97,6 @@ def test_ai_can_rephrase_existing_technical_skill_without_new_claim():
     }
     output = validate_ai_rewrite(source, proposal)
     assert output.experience[0].bullets[0] == "使用 Python 实现 API 接口"
-
-
-def test_loose_rewrite_shape_skips_unmatched_entries_but_keeps_other_changes():
-    original = Resume(name="测试", summary="松散描述", experience=[
-        Entry(heading="临时项目", bullets=["负责测试", "整理文档"]),
-        Entry(heading="其他经历", bullets=["支持发布"]),
-    ])
-    proposal = {
-        "summary": "描述项目测试与文档整理",
-        "experience_bullets": [
-            ["测试", "整理", "新增了一条"],  # Cannot align: preserve original.
-            ["参与发布支持"],
-        ],
-        "project_bullets": [],
-        "name": "模型编造的人名",  # Outside writable fields.
-    }
-    result = validate_ai_rewrite(original, proposal)
-    assert result.name == "测试"
-    assert result.summary == "描述项目测试与文档整理"
-    assert result.experience[0].bullets == ["负责测试", "整理文档"]
-    assert result.experience[1].bullets == ["参与发布支持"]
-    assert original.experience[1].bullets == ["支持发布"]
 
 
 def test_docx_page_size_is_a4():

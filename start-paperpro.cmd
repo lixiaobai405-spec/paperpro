@@ -23,9 +23,5 @@ if not exist "frontend\dist\index.html" (
   exit /b 1
 )
 start "" "http://127.0.0.1:8766/"
-if exist ".env" (
-  uv run --env-file ".env" --python 3.12 python -m uvicorn app.main:app --host 127.0.0.1 --port 8766
-) else (
-  uv run --python 3.12 python -m uvicorn app.main:app --host 127.0.0.1 --port 8766
-)
+uv run --python 3.12 python -m uvicorn app.main:app --host 127.0.0.1 --port 8766
 if errorlevel 1 pause

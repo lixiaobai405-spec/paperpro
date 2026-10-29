@@ -26,7 +26,7 @@ A contradiction needs all of these conditions:
 
 Example: `summary: 我熟悉 Python` versus `skills.0: Python：不会`.
 This generates a verification issue with two citations, an interview question,
-and an optional, medium-priority review suggestion. It does not require a correction, supporting attachments, or extra steps before exporting. Selected TXT exports
+and a selectable, high-priority correction suggestion. Selected TXT exports
 retain both snippets and paths. The UI never chooses which statement is true.
 
 ## Counterexamples deliberately ignored
@@ -41,8 +41,6 @@ retain both snippets and paths. The UI never chooses which statement is true.
 - `以前不会 Python，后来掌握 Python`: change over time.
 - `项目初期尚未使用 SQL，后期使用 SQL`: change over time.
 - A current skills list and a historical work-project mention: different scope.
-
-We will not build a fine-grained numerical-claim consistency checker: different numbers in one project may refer to different stages, baselines or measurements. The user's description is not a technical audit.
 
 Unclear tense, incomplete claims, unknown technology names, number-only
 differences and broad semantic paraphrases are **not** solved by this rule.
